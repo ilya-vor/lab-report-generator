@@ -1,0 +1,14 @@
+# Нормализация переводов строк
+* text=auto
+
+# Бинарные файлы
+*.docx binary
+*.png  binary
+*.pdf  binary
+
+# XML/текстовые форматы храним с LF
+*.bpmn text eol=lf
+*.svg  text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.ps1  text
