@@ -296,6 +296,81 @@ def _draw_link(ax, link, boxes):
 # ---------------------------------------------------------------------------
 # Публичный API
 # ---------------------------------------------------------------------------
+def render_ishikawa(effect, branches, path_png, width=None, height=214.0,
+                    svg=True, head_w=86.0, head_h=80.0,
+                    fs_cause=8.0, fs_cat=8.4, fs_effect=8.2):
+    """Рисует диаграмму Исикавы («рыбий скелет»).
+
+    ``effect`` - следствие в «голове» (краткая формулировка проблемы),
+    ``branches`` - список ``(категория, причина)``; причины раскладываются
+    поочередно сверху и снизу от горизонтальной оси («позвоночника»).
+
+    Пример:
+
+        render_ishikawa("Задержка 4-8 ч",
+                        [("Персонал", "один сотрудник"),
+                         ("Процесс", "дублирование проверок")],
+                        "out/ishikawa.png")
+    """
+    canvas_w = width or CANVAS_W
+    fig = plt.figure(figsize=(canvas_w / 72.0, height / 72.0), dpi=DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    spine_y = height / 2.0
+    head_cx = canvas_w - head_w / 2.0 - 2.0
+    spine_x0 = 26.0
+    spine_x1 = head_cx - head_w / 2.0
+
+    n = len(branches)
+    seg = (spine_x1 - spine_x0 - 34.0) / max(n, 1)
+    dx, dy = 27.0, 44.0
+
+    # «Голова»: следствие
+    ax.add_patch(FancyBboxPatch(
+        (head_cx - head_w / 2, spine_y - head_h / 2), head_w, head_h,
+        boxstyle="round,pad=0,rounding_size=4",
+        facecolor=COLORS["fill_env"], edgecolor=COLORS["ink"], lw=1.2,
+        zorder=5))
+    ax.text(head_cx, spine_y, effect, ha="center", va="center",
+            fontsize=fs_effect, family=FONT, fontweight="bold",
+            color=COLORS["text"], zorder=6, linespacing=1.25)
+
+    # «Позвоночник» со стрелкой в голову
+    ax.add_patch(FancyArrowPatch((spine_x0, spine_y), (spine_x1 - 1, spine_y),
+                                 arrowstyle="-|>", mutation_scale=10,
+                                 color=COLORS["ink"], lw=1.5, zorder=2))
+
+    for i, (cat, cause) in enumerate(branches):
+        above = (i % 2 == 0)
+        x = spine_x0 + seg * (i + 0.5) + 8.0
+        sign = 1 if above else -1
+        tx, ty = x + dx, spine_y + sign * dy
+        ax.plot([x, tx], [spine_y, ty], color=COLORS["ink"], lw=0.9,
+                zorder=3, solid_capstyle="round")
+        gap = 2.5 if above else -2.5
+        va = "bottom" if above else "top"
+        ax.text(tx, ty + gap, cat, ha="center", va=va, fontsize=fs_cat,
+                family=FONT, fontweight="bold", color=COLORS["accent"],
+                zorder=6)
+        ax.text(tx, ty + gap + sign * 10.5, cause, ha="center", va=va,
+                fontsize=fs_cause, family=FONT, color=COLORS["text"],
+                linespacing=1.22, zorder=6)
+
+    path_png = os.path.abspath(path_png)
+    os.makedirs(os.path.dirname(path_png), exist_ok=True)
+    fig.savefig(path_png, dpi=DPI, facecolor="white")
+    out_svg = None
+    if svg:
+        out_svg = os.path.splitext(path_png)[0] + ".svg"
+        fig.savefig(out_svg, facecolor="white")
+    plt.close(fig)
+    return path_png, out_svg
+
+
 def render(boxes, links, path_png, height=330.0, legend=None, width=None,
            svg=True, pad=2.0):
     """Рисует схему и сохраняет PNG (и SVG рядом).
