@@ -1,36 +1,56 @@
 # Конвейер
 
 ```
-generate_scheme.py   ->  .bpmn / .png / .svg
-build_report_docx.py ->  .docx (титул и рамка из report_template.docx)
-update_fields.ps1    ->  обновление полей и TOC в Word
+build.py --lab N
+   |
+   +-- labs/<лаба>.py     схемы (PNG/SVG) + текст отчёта
+   |      +-- labkit/schemes.py   рендер схем
+   |      +-- labkit/docxgen.py   сборка DOCX из шаблона
+   |
+   +-- update_fields.ps1  поля и TOC через Word
+   +-- to_pdf.ps1         экспорт в PDF (--pdf)
 ```
 
-## generate_scheme.py
+Для ЛР1 `build.py --lab 1` вызывает старые скрипты `generate_scheme.py` и
+`build_report_docx.py`: там своя цепочка, она оставлена как есть.
 
-Единый источник данных:
+## labkit/schemes.py
 
-- `LANES` - дорожки;
-- `NODES` - `(id, type, name, lane, col, offset)`, type = `task|xor|start|end|timer`;
-- `FLOWS` - `(id, source, target, label, cond)`;
-- `PROBLEM_STYLE` - подсветка проблемных зон.
+Схема описывается двумя списками, координаты в пунктах (canvas 482 pt = 17 см,
+поэтому рисунок вставляется в DOCX 1:1 без масштабирования).
 
-Из них строятся BPMN-XML (`generate_bpmn`) и картинка matplotlib (`draw_diagram`).
+- `Box(id, text, x, y, w, h, kind, fill, fs, bold, lw, wrap, title)`;
+  `kind`: `box` (скруглённый блок), `db` (цилиндр), `cloud` (внешняя среда),
+  `text` (подпись без рамки). `title` рисует жирный заголовок над текстом.
+- `Link(src, dst, label, kind, via, label_at, label_dx/dy, s_side/t_side,
+  s_off/t_off, fs, lw, arrow)`; `kind`: `flow` (сплошная), `feedback`
+  (штриховая), `data` (тонкая цветная).
 
-Важное:
-- Ось Y в BPMN направлена вниз, в matplotlib вверх -> координаты BPMN
-  зеркалятся (`flip_y`), иначе дорожки идут наоборот.
-- Цвета проблемных зон переносятся в BPMN через `bioc:fill`/`bioc:stroke`.
+Геометрия сама находит точки на границах блоков (`_anchor`), поэтому линии
+не заходят под текст. `via` задаёт промежуточные точки для ломаных,
+`s_off/t_off` сдвигают точку вдоль стороны, чтобы две встречные стрелки
+не сливались. Подписи рисуются с белой подложкой.
 
-## build_report_docx.py
+## labkit/docxgen.py
 
-- Надёжнее клонировать шаблон, чем строить с нуля (специфичные титул/рамка/стили).
-- Порядок: `clear_content` -> `patch_title_page` -> `build_content`
-  (иначе сдвиг индексов узлов титула и дублирование).
-- Титул: `kids[1]` институт, `kids[6]` тема, `kids[11]` дисциплина, `kids[16]` штамп.
-- Настройки в блоке `НАСТРОЙКИ`: `FULL_TITLE`, `SHORT_TITLE`, `DEPT`,
-  `DISCIPLINE`, `TEACHER`, `GROUP`, `OLD_*`, `OUT`, `IMG`.
+- `ReportMeta` - всё, что подставляется: номер лабы, тема (на титуле, в рамке,
+  в шапке), кафедра/институт, дисциплина, преподаватель, группа, студент.
+- `Report.prepare()`: `_clear_content` (удаляет наполнение шаблона),
+  `_patch_title_page` (титул), `_compact_title` (убирает пустые абзацы).
+- Методы наполнения: `h1/h2`, `p`, `bullets`, `numbers`, `table`, `figure`,
+  `spacer`, `page_break`.
+- `Report.save()`: сохранение и `_patch_package` - правки `header1.xml`
+  (номер работы, тема, ФИО, группа в штампе), `numbering.xml` (табуляция
+  номеров разделов), `settings.xml` (`updateFields`).
 
-## update_fields.ps1
+## labs/lab2_siz.py
 
-Word (COM) обновляет `Fields` и `TablesOfContents` и сохраняет файл.
+ЛР2 «Структурная схема управления процессом» по теме ВКР (распознавание СИЗ).
+Две схемы: контур управления (объект/субъект/внешняя среда/обратные связи) и
+функциональная структура системы (9 модулей + БД + ERP). Текст отчёта -
+функция `build_content(rep)`.
+
+## update_fields.ps1 / to_pdf.ps1
+
+Word (COM) обновляет `Fields` и `TablesOfContents`, пересчитывает разбиение на
+страницы и сохраняет файл; `to_pdf.ps1` делает то же и экспортирует PDF.

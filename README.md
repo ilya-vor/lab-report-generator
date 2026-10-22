@@ -1,36 +1,45 @@
 # lab-report-generator
 
-Тулкит для отчётов по лабам: схема BPMN 2.0 (`.bpmn` + `.png`/`.svg`) и сборка
+Тулкит для отчётов по лабам: схема (BPMN 2.0 или структурная схема) и сборка
 DOCX строго по шаблону кафедры.
 
 Типовая часть (титул, рамка-штамп, стили, содержание) клонируется из
 `report_template.docx` без изменения структуры; меняется только наполнение.
 
-## Файлы
-
-| Файл | Назначение |
-|------|-----------|
-| `generate_scheme.py` | BPMN + PNG/SVG из единых `LANES/NODES/FLOWS`. |
-| `build_report_docx.py` | Сборка отчёта из шаблона. |
-| `update_fields.ps1` | Обновление полей/TOC через Word. |
-| `build_all.ps1` | Вся цепочка сразу. |
-
-## Запуск
+## Сборка
 
 ```powershell
 pip install -r requirements.txt
-powershell -NoProfile -ExecutionPolicy Bypass -File build_all.ps1
+
+python build.py --lab 2          # ЛР2: схемы + DOCX + обновление TOC
+python build.py --lab 2 --pdf    # то же и PDF (нужен установленный Word)
+python build.py --lab 1          # ЛР1 по старой цепочке (BPMN + DOCX)
 ```
 
-По шагам: `python generate_scheme.py` -> `python build_report_docx.py` ->
-`update_fields.ps1 -Path <отчёт>.docx`.
+Файлы появляются в `out/`. Без Word используйте `--no-fields`: содержание
+останется шаблонным, пока его не обновят вручную (F9).
+
+## Структура
+
+| Путь | Назначение |
+|------|-----------|
+| `build.py` | единая точка сборки (`--lab`, `--pdf`, `--no-fields`). |
+| `labkit/schemes.py` | рендер структурных схем: блоки, потоки, обратные связи, БД, облака. |
+| `labkit/docxgen.py` | сборка DOCX из шаблона: титул, рамка, TOC, таблицы, рисунки. |
+| `labs/lab2_siz.py` | ЛР2: схемы и текст отчёта (мониторинг СИЗ). |
+| `generate_scheme.py` | ЛР1: BPMN + PNG/SVG из единых `LANES/NODES/FLOWS`. |
+| `build_report_docx.py` | ЛР1: сборка отчёта (историческая цепочка). |
+| `update_fields.ps1` | обновление полей/TOC через Word. |
+| `to_pdf.ps1` | экспорт DOCX в PDF через Word. |
+| `build_all.ps1` | старая цепочка ЛР1 целиком. |
 
 ## Правила
 
 1. Титул и рамку не перерисовываем, клонируем из шаблона.
-2. В `build()` порядок: `clear_content` -> `patch_title_page` -> `build_content`.
-3. Схема: правьте `LANES/NODES/FLOWS` в `generate_scheme.py`.
-4. Поля/TOC обновляет Word (`update_fields.ps1`).
-5. Без длинных тире; диапазоны (`4-8`) и минус в формулах сохраняем.
+2. В `labkit.docxgen` порядок: `prepare()` (очистка + титул) -> наполнение -> `save()`.
+3. Тексты-маркеры шаблона живут в `TPL`; замена идёт сквозь runs.
+4. Схемы ЛР2 правятся в `labs/lab2_siz.py` (`Box`/`Link`), ЛР1 в `generate_scheme.py`.
+5. Поля/TOC обновляет Word (`update_fields.ps1`, `python build.py --pdf`).
+6. Без длинных тире; диапазоны (`4-8`) и минус в формулах сохраняем.
 
-Детали: `docs/`. История: `HISTORY.md`.
+Детали: `docs/`. История: `HISTORY.md`. Изменения: `CHANGELOG.md`.
