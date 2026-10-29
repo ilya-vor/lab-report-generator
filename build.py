@@ -22,6 +22,7 @@ LABS = {
     "3": "labs.lab3_sppr",
     "4": "labs.lab4_ontology",
     "5": "labs.lab5_models",
+    "6": "labs.lab6_efficiency",
 }
 
 

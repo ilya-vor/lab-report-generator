@@ -912,3 +912,97 @@ def render(boxes, links, path_png, height=330.0, legend=None, width=None,
         fig.savefig(out_svg, facecolor="white")
     plt.close(fig)
     return path_png, out_svg
+
+
+# ---------------------------------------------------------------------------
+# Диаграмма значений (профиль показателей)
+# ---------------------------------------------------------------------------
+def render_bars(rows, path_png, height=290.0, width=None, svg=True,
+                label_w=176.0, fs=6.0, vmax=1.0, target=1.0,
+                target_label="цель", fmt="{:.2f}", grid=0.2,
+                bar_color=None, note=None):
+    """Горизонтальная диаграмма значений: одна полоса на строку.
+
+    ``rows`` - список ``(подпись, значение)`` или
+    ``(подпись, значение, цвет)``. Служит для сравнения нормированных
+    показателей на общей шкале: вертикальный ориентир ``target``
+    показывает целевое значение, а подписи слева задают код и смысл
+    строки. Значения выводятся числом у конца полосы.
+
+    Пример:
+
+        render_bars([("П3.2 полнота фиксации", 0.89),
+                     ("П4.1 F1 распознавания", 0.63)],
+                    "out/profile.png", target=1.0)
+    """
+    canvas_w = width or CANVAS_W
+    fig = plt.figure(figsize=(canvas_w / 72.0, height / 72.0), dpi=DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    color = bar_color or COLORS["accent"]
+    n = max(len(rows), 1)
+    vmax = vmax or max([abs(r[1]) for r in rows] + [1.0])
+    top = height - 12.0
+    bottom = 24.0
+    x0 = label_w + 6.0
+    x1 = canvas_w - 26.0
+    step = (top - bottom) / n
+    bar_h = min(7.5, step * 0.5)
+
+    def num(value):
+        """Число с десятичной запятой: в отчёте принят русский формат."""
+        return fmt.format(value).replace(".", ",")
+
+    val = 0.0
+    while val <= vmax + 1e-9:
+        gx = x0 + (x1 - x0) * val / vmax
+        ax.plot([gx, gx], [bottom, top], color="#e3e7ec", lw=0.5, zorder=1)
+        ax.text(gx, bottom - 6.0, num(val), ha="center", va="center",
+                fontsize=fs - 1.0, family=FONT, color=COLORS["muted"])
+        val += grid
+
+    if target:
+        tx = x0 + (x1 - x0) * target / vmax
+        ax.plot([tx, tx], [bottom, top + 4.0], color=COLORS["ink"], lw=0.8,
+                linestyle=(0, (4, 3)), zorder=2)
+        ax.text(tx - 2.0, top + 7.0, target_label, ha="right", va="center",
+                fontsize=fs - 0.6, family=FONT, color=COLORS["muted"],
+                zorder=4)
+
+    for i, row in enumerate(rows):
+        label, value = row[0], row[1]
+        c = row[2] if len(row) > 2 else color
+        y = top - step * (i + 0.5)
+        ax.text(label_w, y, label, ha="right", va="center", fontsize=fs,
+                family=FONT, color=COLORS["text"], zorder=4)
+        bx = x0 + (x1 - x0) * min(max(value, 0.0), vmax) / vmax
+        ax.add_patch(Rectangle((x0, y - bar_h / 2.0), max(bx - x0, 0.6),
+                               bar_h, facecolor=c, edgecolor="none",
+                               zorder=3))
+        # длинную полосу подписываем изнутри: иначе число наезжает на
+        # ориентир цели и на соседние строки
+        if bx - x0 > 24.0:
+            ax.text(bx - 3.0, y, num(value), ha="right", va="center",
+                    fontsize=fs, family=FONT, color="white", zorder=4)
+        else:
+            ax.text(bx + 3.0, y, num(value), ha="left", va="center",
+                    fontsize=fs, family=FONT, color=COLORS["text"], zorder=4)
+
+    ax.plot([x0, x0], [bottom, top], color=COLORS["ink"], lw=0.6, zorder=2)
+    if note:
+        ax.text(2.0, 6.0, note, ha="left", va="center", fontsize=fs - 0.6,
+                family=FONT, color=COLORS["muted"], zorder=4)
+
+    path_png = os.path.abspath(path_png)
+    os.makedirs(os.path.dirname(path_png), exist_ok=True)
+    fig.savefig(path_png, dpi=DPI, facecolor="white")
+    out_svg = None
+    if svg:
+        out_svg = os.path.splitext(path_png)[0] + ".svg"
+        fig.savefig(out_svg, facecolor="white")
+    plt.close(fig)
+    return path_png, out_svg
