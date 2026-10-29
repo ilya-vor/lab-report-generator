@@ -19,6 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # номер лабы -> модуль пакета labs с функцией build()
 LABS = {
     "2": "labs.lab2_siz",
+    "3": "labs.lab3_sppr",
 }
 
 
