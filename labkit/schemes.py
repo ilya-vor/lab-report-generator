@@ -296,20 +296,23 @@ def _draw_link(ax, link, boxes):
 # ---------------------------------------------------------------------------
 # Публичный API
 # ---------------------------------------------------------------------------
-def render_ishikawa(effect, branches, path_png, width=None, height=214.0,
-                    svg=True, head_w=86.0, head_h=80.0,
-                    fs_cause=8.0, fs_cat=8.4, fs_effect=8.2):
-    """Рисует диаграмму Исикавы («рыбий скелет»).
+def render_ishikawa(effect, branches, path_png, width=None, height=212.0,
+                    svg=True, head_w=76.0, head_h=58.0,
+                    fs_cause=7.0, fs_cat=8.6, fs_effect=8.0,
+                    dx=32.0, dy=76.0, text_w=52.0):
+    """Рисует диаграмму Исикавы («рыбий скелет») с подветвями.
 
-    ``effect`` - следствие в «голове» (краткая формулировка проблемы),
-    ``branches`` - список ``(категория, причина)``; причины раскладываются
-    поочередно сверху и снизу от горизонтальной оси («позвоночника»).
+    ``effect`` - следствие в «голове»; ``branches`` - список
+    ``(категория, частные причины)``, где частные причины заданы списком
+    строк (или одной строкой). Кости верхнего уровня чередуются сверху и
+    снизу от «позвоночника», частные причины рисуются короткими
+    горизонтальными штрихами вдоль кости.
 
     Пример:
 
         render_ishikawa("Задержка 4-8 ч",
-                        [("Персонал", "один сотрудник"),
-                         ("Процесс", "дублирование проверок")],
+                        [("Персонал", ["один сотрудник", "нет резерва"]),
+                         ("Технологии", ["нет онлайн-детекции"])],
                         "out/ishikawa.png")
     """
     canvas_w = width or CANVAS_W
@@ -322,12 +325,11 @@ def render_ishikawa(effect, branches, path_png, width=None, height=214.0,
 
     spine_y = height / 2.0
     head_cx = canvas_w - head_w / 2.0 - 2.0
-    spine_x0 = 26.0
+    spine_x0 = 24.0
     spine_x1 = head_cx - head_w / 2.0
 
     n = len(branches)
     seg = (spine_x1 - spine_x0 - 34.0) / max(n, 1)
-    dx, dy = 27.0, 44.0
 
     # «Голова»: следствие
     ax.add_patch(FancyBboxPatch(
@@ -335,30 +337,47 @@ def render_ishikawa(effect, branches, path_png, width=None, height=214.0,
         boxstyle="round,pad=0,rounding_size=4",
         facecolor=COLORS["fill_env"], edgecolor=COLORS["ink"], lw=1.2,
         zorder=5))
-    ax.text(head_cx, spine_y, effect, ha="center", va="center",
+    ax.text(head_cx, spine_y, wrap_text(effect, max(10, int((head_w - 8) / (0.5 * fs_effect)))),
+            ha="center", va="center",
             fontsize=fs_effect, family=FONT, fontweight="bold",
-            color=COLORS["text"], zorder=6, linespacing=1.25)
+            color=COLORS["text"], zorder=6, linespacing=1.3)
 
     # «Позвоночник» со стрелкой в голову
     ax.add_patch(FancyArrowPatch((spine_x0, spine_y), (spine_x1 - 1, spine_y),
                                  arrowstyle="-|>", mutation_scale=10,
                                  color=COLORS["ink"], lw=1.5, zorder=2))
 
-    for i, (cat, cause) in enumerate(branches):
+    for i, (cat, causes) in enumerate(branches):
+        if isinstance(causes, str):
+            causes = [causes]
         above = (i % 2 == 0)
-        x = spine_x0 + seg * (i + 0.5) + 8.0
         sign = 1 if above else -1
+        x = spine_x0 + seg * (i + 0.5) + 8.0
         tx, ty = x + dx, spine_y + sign * dy
-        ax.plot([x, tx], [spine_y, ty], color=COLORS["ink"], lw=0.9,
+
+        # кость первого уровня и подпись категории у её конца
+        ax.plot([x, tx], [spine_y, ty], color=COLORS["ink"], lw=1.0,
                 zorder=3, solid_capstyle="round")
-        gap = 2.5 if above else -2.5
-        va = "bottom" if above else "top"
-        ax.text(tx, ty + gap, cat, ha="center", va=va, fontsize=fs_cat,
+        ax.text(tx, ty + (2.5 if above else -2.5), cat, ha="center",
+                va="bottom" if above else "top", fontsize=fs_cat,
                 family=FONT, fontweight="bold", color=COLORS["accent"],
                 zorder=6)
-        ax.text(tx, ty + gap + sign * 10.5, cause, ha="center", va=va,
-                fontsize=fs_cause, family=FONT, color=COLORS["text"],
-                linespacing=1.22, zorder=6)
+
+        # частные причины: короткие штрихи вдоль кости
+        mirror = tx > spine_x1 - text_w - 24.0
+        k = len(causes)
+        max_chars = max(8, int(text_w / (0.5 * fs_cause)))
+        for j, cause in enumerate(causes):
+            cause = wrap_text(cause, max_chars)
+            t = 0.5 if k == 1 else 0.22 + 0.58 * j / (k - 1)
+            bx, by = x + t * dx, spine_y + sign * t * dy
+            tick = 13.0
+            ax.plot([bx, bx + (-tick if mirror else tick)], [by, by],
+                    color=COLORS["ink"], lw=0.7, zorder=3)
+            ax.text(bx + (-tick - 2 if mirror else tick + 2), by, cause,
+                    ha="right" if mirror else "left", va="center",
+                    fontsize=fs_cause, family=FONT, color=COLORS["text"],
+                    linespacing=1.15, zorder=6)
 
     path_png = os.path.abspath(path_png)
     os.makedirs(os.path.dirname(path_png), exist_ok=True)
