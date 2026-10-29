@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """Единая точка сборки отчётов по лабораторным работам.
 
-    python build.py --lab 2            # собрать отчёт ЛР2 (схемы + DOCX)
+    python build.py --lab 2            # схемы + DOCX
     python build.py --lab 2 --pdf      # то же и PDF (нужен установленный Word)
-    python build.py --lab 1            # старая цепочка ЛР1 (BPMN + DOCX)
+    python build.py --lab 2 --no-fields  # не трогать поля и TOC
 
-Каждая лаба: модуль из пакета ``labs`` с функцией ``build()``.
+Каждая лаба - модуль из пакета ``labs`` с функцией ``build()``.
+Новая лаба: создайте ``labs/labN_<тема>.py`` (см. ``docs/next-lab.md``),
+допишите пару ``LABS`` - и всё, других правок не нужно.
 """
 import argparse
 import os
@@ -14,26 +16,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# лаба -> модуль пакета labs с функцией build().
-# ЛР1 собрана старыми скриптами, поэтому её в словаре нет: см. build_lab1().
+# номер лабы -> модуль пакета labs с функцией build()
 LABS = {
     "2": "labs.lab2_siz",
 }
 
 
-def build_lab1():
-    """ЛР1: отдельные скрипты BPMN-схемы и отчёта (историческая цепочка)."""
-    import generate_scheme
-    import build_report_docx
-
-    generate_scheme.generate_bpmn()
-    generate_scheme.draw_diagram()
-    return build_report_docx.build()
-
-
 def run(lab):
-    if lab == "1":
-        return [build_lab1()]
     mod = __import__(LABS[lab], fromlist=["build"])
     return [mod.build()]
 
@@ -56,7 +45,7 @@ def to_pdf(path):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Сборка отчёта по лабораторной")
-    ap.add_argument("--lab", default="2", choices=["1", "2"],
+    ap.add_argument("--lab", default="2", choices=sorted(LABS),
                     help="номер лабораторной работы")
     ap.add_argument("--pdf", action="store_true", help="собрать ещё и PDF")
     ap.add_argument("--no-fields", action="store_true",
