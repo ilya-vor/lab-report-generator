@@ -24,8 +24,9 @@ from dataclasses import dataclass, field
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.path import Path
 from matplotlib.patches import (Circle, Ellipse, FancyArrowPatch,
-                               FancyBboxPatch, Rectangle)
+                               FancyBboxPatch, PathPatch, Rectangle)
 
 # 17 см в пунктах: ширина картинки в отчёте
 CANVAS_W = 17.0 / 2.54 * 72.0
@@ -91,6 +92,8 @@ class Link:
     t_side: str = ""
     s_off: float = 0.0      # сдвиг точки крепления вдоль стороны блока
     t_off: float = 0.0
+    label_ha: str = "center"  # прижатие подписи: left/center/right
+    label_va: str = "bottom"
     fs: float = 6.8
     lw: float = 1.0
     arrow: bool = True
@@ -167,21 +170,66 @@ def _draw_db(ax, box):
             fontweight="bold" if box.bold else "normal")
 
 
-def _draw_cloud(ax, box):
-    """Облако внешней среды: союз окружностей, нарисованный в два прохода."""
+def _cloud_circles(box):
+    """Набор окружностей, из которых собирается облако.
+
+    Внутренние окружности закрывают полость в центре: иначе объединение
+    даёт «дырку» прямо под текстом.
+    """
     hw, hh = box.w / 2, box.h / 2
-    circles = [
+    rel = [
         (-hw * 0.55, hh * 0.18, hh * 0.62), (-hw * 0.18, hh * 0.52, hh * 0.60),
         (hw * 0.22, hh * 0.46, hh * 0.52), (hw * 0.58, hh * 0.10, hh * 0.50),
         (-hw * 0.62, -hh * 0.30, hh * 0.50), (-hw * 0.15, -hh * 0.55, hh * 0.55),
         (hw * 0.30, -hh * 0.46, hh * 0.48), (hw * 0.62, -hh * 0.26, hh * 0.42),
+        (0.0, hh * 0.16, hh * 0.56), (0.0, -hh * 0.22, hh * 0.56),
     ]
-    for dx, dy, r in circles:
-        ax.add_patch(Circle((box.x + dx, box.y + dy), r, facecolor=box.fill,
-                            edgecolor=box.edge, lw=box.lw, zorder=3))
-    for dx, dy, r in circles:
-        ax.add_patch(Circle((box.x + dx, box.y + dy), r * 0.965,
-                            facecolor=box.fill, edgecolor="none", zorder=4))
+    return [(box.x + dx, box.y + dy, r) for dx, dy, r in rel]
+
+
+def _draw_cloud(ax, box):
+    """Облако внешней среды: сплошная заливка и один внешний контур.
+
+    Облако - объединение окружностей. Если рисовать окружности по
+    отдельности, внутренние дуги просвечивают через текст, а контур по
+    изолинии поля расстояний рвётся на плоских участках. Поэтому
+    объединение считается через shapely, а при его отсутствии работает
+    запасной вариант по изолинии.
+    """
+    circles = _cloud_circles(box)
+    try:
+        from shapely.geometry import Point
+        from shapely.ops import unary_union
+        merged = unary_union([Point(cx, cy).buffer(r, quad_segs=64)
+                              for cx, cy, r in circles])
+        polys = [merged] if merged.geom_type == "Polygon" else list(merged.geoms)
+        verts, codes = [], []
+        for poly in polys:
+            for ring in [poly.exterior] + list(poly.interiors):
+                pts = list(ring.coords)
+                verts.extend(pts)
+                codes.extend([Path.MOVETO] + [Path.LINETO] * (len(pts) - 2)
+                             + [Path.CLOSEPOLY])
+        ax.add_patch(PathPatch(Path(verts, codes), facecolor=box.fill,
+                               edgecolor=box.edge, lw=box.lw,
+                               joinstyle="round", zorder=3))
+    except ImportError:  # pragma: no cover - запасной путь без shapely
+        import numpy as np
+
+        hw, hh = box.w / 2, box.h / 2
+        xs = np.linspace(box.x - hw - 4, box.x + hw + 4, 900)
+        ys = np.linspace(box.y - hh - 4, box.y + hh + 4, 560)
+        gx, gy = np.meshgrid(xs, ys)
+        dist = np.stack([np.hypot(gx - cx, gy - cy) - r
+                         for cx, cy, r in circles])
+        low = dist.min(axis=0)
+        k = 20.0
+        field = low - np.log(np.exp(-k * (dist - low)).sum(axis=0)) / k
+        ax.contourf(gx, gy, field, levels=[-1e6, 0.5], colors=[box.fill],
+                    zorder=3)
+        ax.contour(gx, gy, field, levels=[0.2], colors=[box.edge],
+                   linewidths=box.lw, zorder=4)
+
     ax.text(box.x, box.y, _label(box), ha="center", va="center",
             fontsize=box.fs, family=FONT, color=COLORS["text"], zorder=6,
             linespacing=1.2)
@@ -287,7 +335,7 @@ def _draw_link(ax, link, boxes):
     if link.label:
         px, py = _polyline_point(pts, link.label_at)
         ax.text(px + link.label_dx, py + link.label_dy, link.label,
-                ha="center", va="bottom", fontsize=link.fs, family=FONT,
+                ha=link.label_ha, va=link.label_va, fontsize=link.fs, family=FONT,
                 color=color, zorder=7, linespacing=1.15,
                 bbox=dict(boxstyle="round,pad=0.14", fc="white", ec="none",
                           alpha=0.92))
