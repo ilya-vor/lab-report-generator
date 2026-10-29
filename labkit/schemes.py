@@ -52,7 +52,8 @@ class Box:
     """Блок схемы.
 
     kind: ``box`` (процесс/модуль), ``db`` (цилиндр БД), ``cloud`` (внешняя
-    среда), ``text`` (подпись без рамки, например вход/выход процесса).
+    среда), ``ellipse`` (процесс DFD), ``text`` (подпись без рамки, например
+    вход/выход процесса).
     """
     id: str
     text: str
@@ -124,6 +125,10 @@ def _anchor(box, toward, side=""):
     if dx == 0 and dy == 0:
         return cx, cy
     hw, hh = box.w / 2, box.h / 2
+    if getattr(box, "kind", "") == "ellipse":
+        # пересечение луча с эллипсом, вписанным в габарит блока
+        k = 1.0 / ((dx / hw) ** 2 + (dy / hh) ** 2) ** 0.5
+        return cx + dx * k, cy + dy * k
     # пересечение луча из центра с прямоугольником
     tx = hw / abs(dx) if dx else float("inf")
     ty = hh / abs(dy) if dy else float("inf")
@@ -265,6 +270,16 @@ def wrap_text(text, width):
         if cur:
             out.append(cur)
     return "\n".join(out)
+
+
+def _draw_ellipse(ax, box):
+    """Эллипс или круг: процесс на диаграмме потоков данных."""
+    ax.add_patch(Ellipse((box.x, box.y), box.w, box.h, facecolor=box.fill,
+                         edgecolor=box.edge, lw=box.lw, zorder=3))
+    ax.text(box.x, box.y, _label(box), ha="center", va="center",
+            fontsize=box.fs, family=FONT, color=COLORS["text"], zorder=4,
+            linespacing=1.15,
+            fontweight="bold" if box.bold else "normal")
 
 
 def _draw_box(ax, box):
@@ -557,6 +572,285 @@ def render_ishikawa(effect, branches, path_png, width=None, height=212.0,
     return path_png, out_svg
 
 
+# ---------------------------------------------------------------------------
+# Диаграмма вариантов использования (UML)
+# ---------------------------------------------------------------------------
+@dataclass
+class Actor:
+    """Актор диаграммы прецедентов: фигурка с подписью под ней.
+
+    ``x``/``y`` - центр туловища, фигурка рисуется вверх от этой точки.
+    """
+    id: str
+    name: str
+    x: float
+    y: float
+    fs: float = 6.4
+    wrap: int = 13
+
+
+@dataclass
+class UseCase:
+    """Прецедент: эллипс с текстом."""
+    id: str
+    text: str
+    x: float
+    y: float
+    rx: float = 54.0
+    ry: float = 17.0
+    fill: str = COLORS["fill"]
+    fs: float = 6.2
+    wrap: int = 14
+
+
+@dataclass
+class UseLink:
+    """Связь прецедентов и актёров.
+
+    kind: ``assoc`` (ассоциация, сплошная линия), ``include``/``extend``
+    (штриховая линия со стрелкой и стереотипом).
+    """
+    src: str
+    dst: str
+    kind: str = "assoc"
+    label: str = ""        # по умолчанию <<include>> / <<extend>>
+    via: tuple = ()        # промежуточные точки: обход соседних эллипсов
+    label_at: float = 0.5
+    label_dx: float = 0.0
+    label_dy: float = 4.0
+    fs: float = 5.8
+
+
+def _draw_actor(ax, act):
+    x, y = act.x, act.y
+    r = 5.0
+    ax.add_patch(Circle((x, y + 16.0), r, facecolor="white",
+                        edgecolor=COLORS["ink"], lw=1.0, zorder=3))
+    ax.plot([x, x], [y + 16.0 - r, y + 4.0], color=COLORS["ink"], lw=1.0,
+            zorder=3)
+    ax.plot([x - 7.0, x + 7.0], [y + 11.5, y + 11.5], color=COLORS["ink"],
+            lw=1.0, zorder=3)
+    ax.plot([x, x - 6.0], [y + 4.0, y - 6.0], color=COLORS["ink"], lw=1.0,
+            zorder=3)
+    ax.plot([x, x + 6.0], [y + 4.0, y - 6.0], color=COLORS["ink"], lw=1.0,
+            zorder=3)
+    ax.text(x, y - 11.0, wrap_text(act.name, act.wrap), ha="center",
+            va="top", fontsize=act.fs, family=FONT, color=COLORS["text"],
+            linespacing=1.15, zorder=4)
+
+
+def _ellipse_anchor(uc, toward):
+    dx, dy = toward[0] - uc.x, toward[1] - uc.y
+    if dx == 0 and dy == 0:
+        return uc.x, uc.y
+    k = 1.0 / ((dx / uc.rx) ** 2 + (dy / uc.ry) ** 2) ** 0.5
+    return uc.x + dx * k, uc.y + dy * k
+
+
+def _actor_anchor(act, toward):
+    x, y = act.x, act.y + 10.0
+    return (x + (5.0 if toward[0] >= x else -5.0), y)
+
+
+def _uc_point(el, toward):
+    if isinstance(el, Actor):
+        return _actor_anchor(el, toward)
+    return _ellipse_anchor(el, toward)
+
+
+def render_usecases(actors, usecases, links, path_png, height=330.0,
+                    width=None, boundary=None, svg=True, title_fs=7.6):
+    """Рисует диаграмму вариантов использования.
+
+    ``boundary`` - кортеж ``(x, y, w, h, title)``: граница системы и её имя
+    (подпись ставится в левый верхний угол). Актёры и прецеденты задаются
+    :class:`Actor` и :class:`UseCase`, связи - :class:`UseLink`.
+    """
+    canvas_w = width or CANVAS_W
+    fig = plt.figure(figsize=(canvas_w / 72.0, height / 72.0), dpi=DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    if boundary:
+        bx, by, bw, bh, btitle = boundary
+        ax.add_patch(Rectangle((bx, by), bw, bh, facecolor="none",
+                               edgecolor=COLORS["ink"], lw=1.1, zorder=1))
+        ax.text(bx + 6.0, by + bh - 9.0, btitle, ha="left", va="center",
+                fontsize=title_fs, family=FONT, fontweight="bold",
+                color=COLORS["accent"], zorder=2)
+
+    elements = {a.id: a for a in actors}
+    elements.update({u.id: u for u in usecases})
+    for link in links:
+        a, b = elements[link.src], elements[link.dst]
+        first = link.via[0] if link.via else (b.x, b.y)
+        last = link.via[-1] if link.via else (a.x, a.y)
+        start = _uc_point(a, first)
+        end = _uc_point(b, last)
+        pts = [start] + list(link.via) + [end]
+        dashed = link.kind in ("include", "extend")
+        linestyle = (0, (4.0, 2.6)) if dashed else "solid"
+        for p, q in zip(pts[:-2], pts[1:-1]):
+            ax.plot([p[0], q[0]], [p[1], q[1]], color=COLORS["ink"],
+                    lw=0.9, linestyle=linestyle, zorder=2)
+        if dashed:
+            ax.add_patch(FancyArrowPatch(
+                pts[-2], pts[-1], arrowstyle="-|>", mutation_scale=8,
+                facecolor="white", edgecolor=COLORS["ink"], lw=0.9,
+                linestyle=(0, (4.0, 2.6)), shrinkA=0, shrinkB=0, zorder=2))
+            label = link.label or ("\u00ab%s\u00bb" % link.kind)
+            mx, my = _polyline_point(pts, link.label_at)
+            ax.text(mx + link.label_dx, my + link.label_dy, label,
+                    ha="center", va="bottom", fontsize=link.fs, family=FONT,
+                    style="italic", color=COLORS["accent"], zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                              ec="none", alpha=0.92))
+        else:
+            ax.plot([pts[-2][0], pts[-1][0]], [pts[-2][1], pts[-1][1]],
+                    color=COLORS["ink"], lw=0.9, zorder=2)
+
+    for uc in usecases:
+        ax.add_patch(Ellipse((uc.x, uc.y), 2 * uc.rx, 2 * uc.ry,
+                             facecolor=uc.fill, edgecolor=COLORS["ink"],
+                             lw=1.0, zorder=3))
+        ax.text(uc.x, uc.y, wrap_text(uc.text, uc.wrap), ha="center",
+                va="center", fontsize=uc.fs, family=FONT,
+                color=COLORS["text"], linespacing=1.15, zorder=4)
+    for act in actors:
+        _draw_actor(ax, act)
+
+    path_png = os.path.abspath(path_png)
+    os.makedirs(os.path.dirname(path_png), exist_ok=True)
+    fig.savefig(path_png, dpi=DPI, facecolor="white")
+    out_svg = None
+    if svg:
+        out_svg = os.path.splitext(path_png)[0] + ".svg"
+        fig.savefig(out_svg, facecolor="white")
+    plt.close(fig)
+    return path_png, out_svg
+
+
+# ---------------------------------------------------------------------------
+# Диаграмма последовательности (UML)
+# ---------------------------------------------------------------------------
+@dataclass
+class Lifeline:
+    """Участник диаграммы последовательности: шапка и пунктир жизни."""
+    id: str
+    name: str
+    x: float
+    w: float = 70.0
+    fs: float = 6.0
+
+
+@dataclass
+class Message:
+    """Сообщение между линиями жизни.
+
+    kind: ``call`` (вызов, сплошная стрелка), ``return`` (возврат,
+    штриховая) или ``self`` (собственное действие, петля).
+    """
+    src: str
+    dst: str
+    text: str
+    kind: str = "call"
+    fs: float = 6.2
+    dx: float = 0.0        # сдвиг подписи вдоль стрелки
+
+
+def render_sequence(lifelines, messages, path_png, height=None, width=None,
+                    svg=True, head_h=25.0, step=21.0):
+    """Рисует диаграмму последовательности с шапками и пунктирами.
+
+    Высота холста по умолчанию считается по числу сообщений, поэтому
+    шаг сообщений остаётся одинаковым при любой длине сценария.
+    """
+    canvas_w = width or CANVAS_W
+    if height is None:
+        height = head_h + 46.0 + step * len(messages)
+    fig = plt.figure(figsize=(canvas_w / 72.0, height / 72.0), dpi=DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    by_id = {l.id: l for l in lifelines}
+    top = height - 4.0
+    head_cy = top - head_h / 2.0
+    life_top = top - head_h - 4.0
+    life_bottom = 10.0
+
+    for line in lifelines:
+        ax.add_patch(FancyBboxPatch(
+            (line.x - line.w / 2, head_cy - head_h / 2), line.w, head_h,
+            boxstyle="round,pad=0,rounding_size=2",
+            facecolor=COLORS["fill_subj"], edgecolor=COLORS["ink"], lw=1.0,
+            zorder=3))
+        ax.text(line.x, head_cy, wrap_text(line.name,
+                                           max(6, int(line.w / (0.52 * line.fs)))),
+                ha="center", va="center", fontsize=line.fs, family=FONT,
+                fontweight="bold", color=COLORS["text"], linespacing=1.1,
+                zorder=4)
+        ax.plot([line.x, line.x], [life_bottom, life_top],
+                color=COLORS["muted"], lw=0.8, linestyle=(0, (4.0, 3.0)),
+                zorder=1)
+
+    y = life_top - 18.0
+    for msg in messages:
+        a, b = by_id[msg.src], by_id[msg.dst]
+        if msg.kind == "self" or a is b:
+            ax.add_patch(FancyArrowPatch(
+                (a.x, y), (a.x + 26.0, y), arrowstyle="-",
+                color=COLORS["ink"], lw=0.9, shrinkA=0, shrinkB=0, zorder=2))
+            ax.plot([a.x + 26.0, a.x + 26.0], [y, y - 10.0],
+                    color=COLORS["ink"], lw=0.9, zorder=2)
+            ax.add_patch(FancyArrowPatch(
+                (a.x + 26.0, y - 10.0), (a.x + 2.5, y - 10.0),
+                arrowstyle="-|>", mutation_scale=7, color=COLORS["ink"],
+                lw=0.9, shrinkA=0, shrinkB=0, zorder=2))
+            ax.text(a.x - 5.0, y - 5.0, msg.text, ha="right", va="center",
+                    fontsize=msg.fs, family=FONT, color=COLORS["text"],
+                    zorder=5, bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                                        ec="none", alpha=0.92))
+        else:
+            left = b.x < a.x
+            x1 = a.x - 2.0 if left else a.x + 2.0
+            x2 = b.x + 2.0 if left else b.x - 2.0
+            if msg.kind == "return":
+                ax.add_patch(FancyArrowPatch(
+                    (x1, y), (x2, y), arrowstyle="-|>", mutation_scale=7,
+                    facecolor="white", edgecolor=COLORS["muted"], lw=0.9,
+                    linestyle=(0, (4.0, 2.6)), shrinkA=0, shrinkB=0,
+                    zorder=2))
+                color = COLORS["muted"]
+            else:
+                ax.add_patch(FancyArrowPatch(
+                    (x1, y), (x2, y), arrowstyle="-|>", mutation_scale=8,
+                    color=COLORS["ink"], lw=0.9, shrinkA=0, shrinkB=0,
+                    zorder=2))
+                color = COLORS["text"]
+            ax.text((a.x + b.x) / 2.0 + msg.dx, y + 5.0, msg.text, ha="center",
+                    va="bottom", fontsize=msg.fs, family=FONT, color=color,
+                    zorder=5, linespacing=1.1,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white",
+                              ec="none", alpha=0.95))
+        y -= step
+
+    path_png = os.path.abspath(path_png)
+    os.makedirs(os.path.dirname(path_png), exist_ok=True)
+    fig.savefig(path_png, dpi=DPI, facecolor="white")
+    out_svg = None
+    if svg:
+        out_svg = os.path.splitext(path_png)[0] + ".svg"
+        fig.savefig(out_svg, facecolor="white")
+    plt.close(fig)
+    return path_png, out_svg
+
+
 def render(boxes, links, path_png, height=330.0, legend=None, width=None,
            svg=True, pad=2.0):
     """Рисует схему и сохраняет PNG (и SVG рядом).
@@ -592,6 +886,8 @@ def render(boxes, links, path_png, height=330.0, legend=None, width=None,
             _draw_db(ax, box)
         elif box.kind == "cloud":
             _draw_cloud(ax, box)
+        elif box.kind == "ellipse":
+            _draw_ellipse(ax, box)
         else:
             _draw_box(ax, box)
 

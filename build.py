@@ -21,6 +21,7 @@ LABS = {
     "2": "labs.lab2_siz",
     "3": "labs.lab3_sppr",
     "4": "labs.lab4_ontology",
+    "5": "labs.lab5_models",
 }
 
 
