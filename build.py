@@ -20,6 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LABS = {
     "2": "labs.lab2_siz",
     "3": "labs.lab3_sppr",
+    "4": "labs.lab4_ontology",
 }
 
 

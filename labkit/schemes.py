@@ -97,6 +97,10 @@ class Link:
     fs: float = 6.8
     lw: float = 1.0
     arrow: bool = True
+    # Наконечник: ``arrow`` (стрелка), ``triangle`` (пустой треугольник,
+    # обобщение UML), ``diamond``/``diamond_open`` (агрегация и композиция),
+    # ``none`` (линия без наконечника). Пусто = ``arrow``.
+    head: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +307,25 @@ def _offset_anchor(pt, side, off):
     return pt[0], pt[1] + off
 
 
+def _draw_head(ax, p, q, head, color, lw):
+    """Наконечник UML-связи в точке ``q`` (линия идёт из ``p``)."""
+    dx, dy = q[0] - p[0], q[1] - p[1]
+    dist = (dx * dx + dy * dy) ** 0.5 or 1.0
+    ux, uy = dx / dist, dy / dist
+    if head == "triangle":
+        ax.add_patch(FancyArrowPatch(
+            p, q, arrowstyle="-|>", mutation_scale=10, facecolor="white",
+            edgecolor=color, lw=lw, shrinkA=0, shrinkB=0, zorder=3))
+        return
+    # ромб рисуется маркером, поэтому сдвигается внутрь линии на полразмера
+    size = 5.6
+    cx, cy = q[0] - ux * size * 0.75, q[1] - uy * size * 0.75
+    fc = color if head == "diamond" else "white"
+    ax.plot([cx], [cy], marker="D", markersize=size,
+            markerfacecolor=fc, markeredgecolor=color, markeredgewidth=lw,
+            zorder=3)
+
+
 def _draw_link(ax, link, boxes):
     a, b = boxes[link.src], boxes[link.dst]
     via = list(link.via)
@@ -322,13 +345,22 @@ def _draw_link(ax, link, boxes):
     for p, q in zip(pts[:-2], pts[1:-1]):
         ax.plot([p[0], q[0]], [p[1], q[1]], color=color, lw=lw,
                 linestyle=ls, zorder=2)
-    if link.arrow:
+    head = link.head or ("arrow" if link.arrow else "none")
+    p, q = pts[-2], pts[-1]
+    if head in ("diamond", "diamond_open"):
+        ax.plot([p[0], q[0]], [p[1], q[1]], color=color, lw=lw,
+                linestyle=ls, zorder=2)
+        _draw_head(ax, p, q, head, color, lw)
+    elif head == "triangle":
+        ax.plot([p[0], q[0]], [p[1], q[1]], color=color, lw=lw,
+                linestyle=ls, zorder=2)
+        _draw_head(ax, p, q, head, color, lw)
+    elif head == "arrow":
         ax.add_patch(FancyArrowPatch(
-            pts[-2], pts[-1], arrowstyle="-|>", mutation_scale=9,
+            p, q, arrowstyle="-|>", mutation_scale=9,
             color=color, lw=lw, linestyle="solid", shrinkA=0, shrinkB=0,
             zorder=2))
     else:
-        p, q = pts[-2], pts[-1]
         ax.plot([p[0], q[0]], [p[1], q[1]], color=color, lw=lw,
                 linestyle=ls, zorder=2)
 
@@ -344,6 +376,93 @@ def _draw_link(ax, link, boxes):
 # ---------------------------------------------------------------------------
 # Публичный API
 # ---------------------------------------------------------------------------
+@dataclass
+class UmlClass:
+    """Класс UML-диаграммы: имя, стереотип, атрибуты.
+
+    Высота блока считается по числу атрибутов, поэтому ``y`` задаёт центр
+    блока, а совпадение с другими блоками можно проверять по сетке.
+    """
+    id: str
+    name: str
+    attrs: tuple = ()
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 104.0
+    code: str = ""        # латинское имя класса (курсивом под названием)
+    fs: float = 6.2
+    fill: str = COLORS["fill"]
+
+
+def _uml_box(cls, header_h, line_h):
+    head = header_h + (9.0 if cls.code else 0.0)
+    h = head + max(len(cls.attrs), 1) * line_h + 4.0
+    return Box(cls.id, "", cls.x, cls.y, cls.w, h)
+
+
+def _draw_uml_class(ax, box, cls, header_h, line_h):
+    hw, hh = box.w / 2, box.h / 2
+    ax.add_patch(FancyBboxPatch(
+        (box.x - hw, box.y - hh), box.w, box.h,
+        boxstyle="round,pad=0,rounding_size=2",
+        facecolor=cls.fill, edgecolor=COLORS["ink"], lw=1.0, zorder=3))
+    head_h = header_h + (9.0 if cls.code else 0.0)
+    sep = box.y + hh - head_h
+    ax.plot([box.x - hw, box.x + hw], [sep, sep], color=COLORS["ink"],
+            lw=0.8, zorder=4)
+    if cls.code:
+        ax.text(box.x, sep + header_h / 2 + 4.0, cls.name, ha="center",
+                va="center", fontsize=cls.fs + 0.8, family=FONT,
+                fontweight="bold", color=COLORS["text"], zorder=4)
+        ax.text(box.x, sep + header_h / 2 - 4.6, cls.code, ha="center",
+                va="center", fontsize=cls.fs - 0.4, family=FONT,
+                style="italic", color=COLORS["muted"], zorder=4)
+    else:
+        ax.text(box.x, sep + header_h / 2, cls.name, ha="center",
+                va="center", fontsize=cls.fs + 0.8, family=FONT,
+                fontweight="bold", color=COLORS["text"], zorder=4)
+    for i, attr in enumerate(cls.attrs):
+        yy = sep - line_h / 2 - 1.0 - i * line_h
+        ax.text(box.x - hw + 4.0, yy, attr, ha="left", va="center",
+                fontsize=cls.fs, family=FONT, color=COLORS["text"], zorder=4)
+
+
+def render_classes(classes, links, path_png, height=330.0, width=None,
+                   svg=True, header_h=14.0, line_h=9.6):
+    """Рисует UML-диаграмму классов (онтологию в нотации UML).
+
+    ``classes`` - список :class:`UmlClass`, ``links`` - :class:`Link` между
+    ними; наконечники задаются полем ``head`` (``triangle`` - обобщение,
+    ``diamond``/``diamond_open`` - композиция и агрегация). Высота блока
+    считается по числу атрибутов, поэтому ``y`` - центр блока.
+    """
+    canvas_w = width or CANVAS_W
+    boxes = [_uml_box(c, header_h, line_h) for c in classes]
+    by_id = {b.id: b for b in boxes}
+
+    fig = plt.figure(figsize=(canvas_w / 72.0, height / 72.0), dpi=DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    for link in links:
+        _draw_link(ax, link, by_id)
+    for cls, box in zip(classes, boxes):
+        _draw_uml_class(ax, box, cls, header_h, line_h)
+
+    path_png = os.path.abspath(path_png)
+    os.makedirs(os.path.dirname(path_png), exist_ok=True)
+    fig.savefig(path_png, dpi=DPI, facecolor="white")
+    out_svg = None
+    if svg:
+        out_svg = os.path.splitext(path_png)[0] + ".svg"
+        fig.savefig(out_svg, facecolor="white")
+    plt.close(fig)
+    return path_png, out_svg
+
+
 def render_ishikawa(effect, branches, path_png, width=None, height=212.0,
                     svg=True, head_w=76.0, head_h=58.0,
                     fs_cause=7.0, fs_cat=8.6, fs_effect=8.0,

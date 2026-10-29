@@ -293,13 +293,14 @@ class Report:
         for item in items:
             par = self.doc.add_paragraph(style="Основной_ЛР")
             self._hang(par)
-            par.add_run("\u2013 " + item)
+            # неразрывный пробел после маркера не растягивается выключкой
+            par.add_run("\u2013\u00a0" + item)
 
     def numbers(self, items):
         for i, item in enumerate(items, 1):
             par = self.doc.add_paragraph(style="Основной_ЛР")
             self._hang(par)
-            par.add_run("%d) " % i + item)
+            par.add_run("%d)\u00a0" % i + item)
 
     @staticmethod
     def _hang(par, indent_cm=1.25, hang_cm=0.7):
@@ -389,6 +390,27 @@ class Report:
 
     def page_break(self):
         self.doc.add_page_break()
+
+    def code(self, text, size=9.5, indent_cm=0.6):
+        """Листинг: монотипный шрифт, без отступа первой строки.
+
+        Строки листинга склеиваются абзацами с ``keep_with_next``, чтобы
+        фрагмент не разрывался между страницами.
+        """
+        lines = text.strip("\n").split("\n")
+        for i, line in enumerate(lines):
+            par = self.doc.add_paragraph()
+            pf = par.paragraph_format
+            pf.first_line_indent = Cm(0)
+            pf.left_indent = Cm(indent_cm)
+            pf.space_before = Pt(0)
+            pf.space_after = Pt(0)
+            pf.line_spacing = 1.0
+            pf.keep_with_next = i < len(lines) - 1
+            run = par.add_run(line if line.strip() else " ")
+            run.font.name = "Courier New"
+            run.font.size = Pt(size)
+        self.spacer(10)
 
     # ---------------- сохранение ----------------
     def save(self):
