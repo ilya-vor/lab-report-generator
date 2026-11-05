@@ -1,0 +1,597 @@
+@prefix org:  <http://example.org/org#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/org> a owl:Ontology ;
+    rdfs:label "Онтология организационной системы предприятия"@ru ;
+    rdfs:comment "Модель контура управления участком машиностроительного предприятия: 26 классов, 26 объектных свойств (13 пар обратных), 14 свойств данных, 7 аксиом, индивиды пилотного участка."@ru ;
+    owl:versionInfo "1.0" ;
+    rdfs:seeAlso <https://github.com/ilya-vor/lab-report-generator> .
+
+#############################################################################
+# Классы: шесть группировочных ветвей, промежуточный Process, 19 концептов
+#############################################################################
+
+org:Actor a owl:Class ;
+    rdfs:label "Субъект"@ru ;
+    rdfs:comment "Работники, их должности и допуски."@ru ;
+    rdfs:subClassOf owl:Thing .
+
+org:Structure a owl:Class ;
+    rdfs:label "Структура"@ru ;
+    rdfs:comment "Предприятие, подразделения и смены."@ru ;
+    rdfs:subClassOf owl:Thing .
+
+org:Production a owl:Class ;
+    rdfs:label "Производство"@ru ;
+    rdfs:comment "Процессы, операции и продукция."@ru ;
+    rdfs:subClassOf owl:Thing .
+
+org:Resource a owl:Class ;
+    rdfs:label "Ресурс"@ru ;
+    rdfs:comment "Оборудование, материалы и средства защиты."@ru ;
+    rdfs:subClassOf owl:Thing .
+
+org:Document a owl:Class ;
+    rdfs:label "Документ"@ru ;
+    rdfs:comment "Регламенты, задания и протоколы."@ru ;
+    rdfs:subClassOf owl:Thing .
+
+org:Control a owl:Class ;
+    rdfs:label "Контроль"@ru ;
+    rdfs:comment "Инциденты, решения и показатели."@ru ;
+    rdfs:subClassOf owl:Thing .
+
+# Ветвь «Субъект»
+
+org:Employee a owl:Class ;
+    rdfs:label "Сотрудник"@ru ;
+    rdfs:comment "Работник с табельным номером, статусом и допусками."@ru ;
+    rdfs:subClassOf org:Actor ,
+        [ a owl:Restriction ;
+          owl:onProperty org:empId ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] ,
+        [ a owl:Restriction ;
+          owl:onProperty org:status ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+org:Position a owl:Class ;
+    rdfs:label "Должность"@ru ;
+    rdfs:comment "Штатная единица с наименованием и признаком руководства."@ru ;
+    rdfs:subClassOf org:Actor ,
+        [ a owl:Restriction ;
+          owl:onProperty org:title ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+org:Competence a owl:Class ;
+    rdfs:label "Компетенция"@ru ;
+    rdfs:comment "Допуск или квалификация работника со сроком действия."@ru ;
+    rdfs:subClassOf org:Actor ,
+        [ a owl:Restriction ;
+          owl:onProperty org:validUntil ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+# Ветвь «Структура»
+
+org:Enterprise a owl:Class ;
+    rdfs:label "Предприятие"@ru ;
+    rdfs:comment "Юридическое лицо, владелец процессов и активов."@ru ;
+    rdfs:subClassOf org:Structure .
+
+org:Division a owl:Class ;
+    rdfs:label "Подразделение"@ru ;
+    rdfs:comment "Цех, участок или служба с границами ответственности."@ru ;
+    rdfs:subClassOf org:Structure ,
+        [ a owl:Restriction ;
+          owl:onProperty org:hasEmployee ;
+          owl:minQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+          owl:onClass org:Employee ] ,
+        [ a owl:Restriction ;
+          owl:onProperty org:kind ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+org:Shift a owl:Class ;
+    rdfs:label "Смена"@ru ;
+    rdfs:comment "Интервал работы и состав работников на участке."@ru ;
+    rdfs:subClassOf org:Structure ,
+        [ a owl:Restriction ;
+          owl:onProperty org:workDate ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+# Ветвь «Производство», промежуточный класс Process
+
+org:Process a owl:Class ;
+    rdfs:label "Процесс"@ru ;
+    rdfs:comment "Промежуточный класс: своих индивидов не имеет, держит общие свойства процессов."@ru ;
+    rdfs:subClassOf org:Production ,
+        [ a owl:Restriction ;
+          owl:onProperty org:governedBy ;
+          owl:someValuesFrom org:Regulation ] .
+
+org:MainProcess a owl:Class ;
+    rdfs:label "Основной процесс"@ru ;
+    rdfs:comment "Деятельность, создающая продукцию (сварка, сборка)."@ru ;
+    rdfs:subClassOf org:Process ;
+    owl:disjointWith org:SupportProcess .
+
+org:SupportProcess a owl:Class ;
+    rdfs:label "Вспомогательный процесс"@ru ;
+    rdfs:comment "Обслуживание основных процессов (ремонт, контроль)."@ru ;
+    rdfs:subClassOf org:Process .
+
+org:Operation a owl:Class ;
+    rdfs:label "Операция"@ru ;
+    rdfs:comment "Шаг процесса с нормой времени и требованиями к СИЗ."@ru ;
+    rdfs:subClassOf org:Production .
+
+org:Product a owl:Class ;
+    rdfs:label "Продукция"@ru ;
+    rdfs:comment "Результат процесса с единицей измерения и ценой."@ru ;
+    rdfs:subClassOf org:Production .
+
+# Ветвь «Ресурс»
+
+org:Equipment a owl:Class ;
+    rdfs:label "Оборудование"@ru ;
+    rdfs:comment "Станок, сварочный пост, камера наблюдения."@ru ;
+    rdfs:subClassOf org:Resource .
+
+org:Material a owl:Class ;
+    rdfs:label "Материал"@ru ;
+    rdfs:comment "Сырьё и расходные материалы производства."@ru ;
+    rdfs:subClassOf org:Resource .
+
+org:PPE a owl:Class ;
+    rdfs:label "СИЗ"@ru ;
+    rdfs:comment "Средство индивидуальной защиты: маска, перчатки, обувь."@ru ;
+    rdfs:subClassOf org:Resource ,
+        [ a owl:Restriction ;
+          owl:onProperty org:class ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] ;
+    owl:disjointWith org:Equipment .
+
+# Ветвь «Документ»
+
+org:Regulation a owl:Class ;
+    rdfs:label "Регламент"@ru ;
+    rdfs:comment "Требования охраны труда с версией и датой утверждения."@ru ;
+    rdfs:subClassOf org:Document .
+
+org:WorkOrder a owl:Class ;
+    rdfs:label "Сменное задание"@ru ;
+    rdfs:comment "Наряд на смену с объёмом работ и составом исполнителей."@ru ;
+    rdfs:subClassOf org:Document .
+
+org:Protocol a owl:Class ;
+    rdfs:label "Протокол"@ru ;
+    rdfs:comment "Акт инструктажа, проверки или фиксации нарушения."@ru ;
+    rdfs:subClassOf org:Document .
+
+# Ветвь «Контроль»
+
+org:Incident a owl:Class ;
+    rdfs:label "Инцидент"@ru ;
+    rdfs:comment "Зафиксированное нарушение требований охраны труда."@ru ;
+    rdfs:subClassOf org:Control ,
+        [ a owl:Restriction ;
+          owl:onProperty org:at ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+org:Decision a owl:Class ;
+    rdfs:label "Решение"@ru ;
+    rdfs:comment "Действие ЛПР по инциденту с обоснованием."@ru ;
+    rdfs:subClassOf org:Control ,
+        [ a owl:Restriction ;
+          owl:onProperty org:resolves ;
+          owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+          owl:onClass org:Incident ] .
+
+org:KPI a owl:Class ;
+    rdfs:label "Показатель"@ru ;
+    rdfs:comment "Измеряемая характеристика подразделения или процесса."@ru ;
+    rdfs:subClassOf org:Control ,
+        [ a owl:Restriction ;
+          owl:onProperty org:value ;
+          owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+# Несовместимости, заданные в таблице 7
+
+org:Position owl:disjointWith org:Employee .
+
+#############################################################################
+# Объектные свойства: 26, из них 13 пар обратных
+#############################################################################
+
+org:worksIn a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "работает в"@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Division ;
+    owl:inverseOf org:hasEmployee .
+
+org:hasEmployee a owl:ObjectProperty ;
+    rdfs:label "имеет работника"@ru ;
+    rdfs:domain org:Division ;
+    rdfs:range org:Employee ;
+    owl:inverseOf org:worksIn .
+
+org:hasPosition a owl:ObjectProperty ;
+    rdfs:label "имеет штатную единицу"@ru ;
+    rdfs:domain org:Division ;
+    rdfs:range org:Position ;
+    owl:inverseOf org:positionIn .
+
+org:positionIn a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "относится к подразделению"@ru ;
+    rdfs:domain org:Position ;
+    rdfs:range org:Division ;
+    owl:inverseOf org:hasPosition .
+
+org:holdsPosition a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "занимает должность"@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Position ;
+    owl:inverseOf org:heldBy .
+
+org:heldBy a owl:ObjectProperty ;
+    rdfs:label "занята работником"@ru ;
+    rdfs:domain org:Position ;
+    rdfs:range org:Employee ;
+    owl:inverseOf org:holdsPosition .
+
+org:hasCompetence a owl:ObjectProperty ;
+    rdfs:label "имеет компетенцию"@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Competence ;
+    owl:inverseOf org:competenceOf .
+
+org:competenceOf a owl:ObjectProperty ;
+    rdfs:label "принадлежит работнику"@ru ;
+    rdfs:domain org:Competence ;
+    rdfs:range org:Employee ;
+    owl:inverseOf org:hasCompetence .
+
+org:hasProcess a owl:ObjectProperty ;
+    rdfs:label "имеет процесс"@ru ;
+    rdfs:domain org:Division ;
+    rdfs:range org:Process ;
+    owl:inverseOf org:partOfDivision .
+
+org:partOfDivision a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "входит в подразделение"@ru ;
+    rdfs:domain org:Process ;
+    rdfs:range org:Division ;
+    owl:inverseOf org:hasProcess .
+
+org:executesProcess a owl:ObjectProperty ;
+    rdfs:label "выполняет процесс"@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Process ;
+    owl:inverseOf org:executedBy .
+
+org:executedBy a owl:ObjectProperty ;
+    rdfs:label "выполняется работником"@ru ;
+    rdfs:domain org:Process ;
+    rdfs:range org:Employee ;
+    owl:inverseOf org:executesProcess .
+
+org:usesResource a owl:ObjectProperty ;
+    rdfs:label "использует ресурс"@ru ;
+    rdfs:domain org:Process ;
+    rdfs:range org:Resource ;
+    owl:inverseOf org:usedIn .
+
+org:usedIn a owl:ObjectProperty ;
+    rdfs:label "используется в процессе"@ru ;
+    rdfs:domain org:Resource ;
+    rdfs:range org:Process ;
+    owl:inverseOf org:usesResource .
+
+org:producesProduct a owl:ObjectProperty ;
+    rdfs:label "выпускает продукцию"@ru ;
+    rdfs:domain org:Process ;
+    rdfs:range org:Product ;
+    owl:inverseOf org:producedBy .
+
+org:producedBy a owl:ObjectProperty ;
+    rdfs:label "произведена процессом"@ru ;
+    rdfs:domain org:Product ;
+    rdfs:range org:Process ;
+    owl:inverseOf org:producesProduct .
+
+org:governs a owl:ObjectProperty ;
+    rdfs:label "регламентирует"@ru ;
+    rdfs:domain org:Regulation ;
+    rdfs:range org:Process ;
+    owl:inverseOf org:governedBy .
+
+org:governedBy a owl:ObjectProperty ;
+    rdfs:label "регламентирован"@ru ;
+    rdfs:domain org:Process ;
+    rdfs:range org:Regulation ;
+    owl:inverseOf org:governs .
+
+org:caused a owl:ObjectProperty ;
+    rdfs:label "стал причиной"@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Incident ;
+    owl:inverseOf org:causedBy .
+
+org:causedBy a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "вызван работником"@ru ;
+    rdfs:domain org:Incident ;
+    rdfs:range org:Employee ;
+    owl:inverseOf org:caused .
+
+org:involvesResource a owl:ObjectProperty ;
+    rdfs:label "затрагивает ресурс"@ru ;
+    rdfs:domain org:Incident ;
+    rdfs:range org:Resource ;
+    owl:inverseOf org:involvedIn .
+
+org:involvedIn a owl:ObjectProperty ;
+    rdfs:label "фигурирует в инциденте"@ru ;
+    rdfs:domain org:Resource ;
+    rdfs:range org:Incident ;
+    owl:inverseOf org:involvesResource .
+
+org:resolves a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "закрывает инцидент"@ru ;
+    rdfs:domain org:Decision ;
+    rdfs:range org:Incident ;
+    owl:inverseOf org:resolvedBy .
+
+org:resolvedBy a owl:ObjectProperty ;
+    rdfs:label "закрыт решением"@ru ;
+    rdfs:domain org:Incident ;
+    rdfs:range org:Decision ;
+    owl:inverseOf org:resolves .
+
+org:measuredBy a owl:ObjectProperty ;
+    rdfs:label "измеряется показателем"@ru ;
+    rdfs:domain org:Division ;
+    rdfs:range org:KPI ;
+    owl:inverseOf org:measures .
+
+org:measures a owl:ObjectProperty ;
+    rdfs:label "измеряет подразделение"@ru ;
+    rdfs:domain org:KPI ;
+    rdfs:range org:Division ;
+    owl:inverseOf org:measuredBy .
+
+#############################################################################
+# Свойства данных: 12 ключевых и признак подтверждения инцидента
+#############################################################################
+
+org:empId a owl:DatatypeProperty ;
+    rdfs:label "табельный номер"@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range xsd:integer .
+
+org:status a owl:DatatypeProperty ;
+    rdfs:label "статус работника"@ru ;
+    rdfs:comment "Допустимые значения: active, leave."@ru ;
+    rdfs:domain org:Employee ;
+    rdfs:range xsd:string .
+
+org:title a owl:DatatypeProperty ;
+    rdfs:label "наименование должности"@ru ;
+    rdfs:domain org:Position ;
+    rdfs:range xsd:string .
+
+org:isManager a owl:DatatypeProperty ;
+    rdfs:label "признак руководства"@ru ;
+    rdfs:domain org:Position ;
+    rdfs:range xsd:boolean .
+
+org:validUntil a owl:DatatypeProperty ;
+    rdfs:label "действительна до"@ru ;
+    rdfs:domain org:Competence ;
+    rdfs:range xsd:dateTime .
+
+org:kind a owl:DatatypeProperty ;
+    rdfs:label "вид подразделения"@ru ;
+    rdfs:comment "Допустимые значения: shop, section, service."@ru ;
+    rdfs:domain org:Division ;
+    rdfs:range xsd:string .
+
+org:workDate a owl:DatatypeProperty ;
+    rdfs:label "дата смены"@ru ;
+    rdfs:domain org:Shift ;
+    rdfs:range xsd:dateTime .
+
+org:normTime a owl:DatatypeProperty ;
+    rdfs:label "норма времени"@ru ;
+    rdfs:domain org:Operation ;
+    rdfs:range xsd:decimal .
+
+org:cost a owl:DatatypeProperty ;
+    rdfs:label "стоимость"@ru ;
+    rdfs:domain org:Resource ;
+    rdfs:range xsd:decimal .
+
+org:class a owl:DatatypeProperty ;
+    rdfs:label "вид СИЗ"@ru ;
+    rdfs:comment "Допустимые значения: mask, gloves, shoes."@ru ;
+    rdfs:domain org:PPE ;
+    rdfs:range xsd:string .
+
+org:nextCheck a owl:DatatypeProperty ;
+    rdfs:label "дата следующей проверки"@ru ;
+    rdfs:domain org:PPE ;
+    rdfs:range xsd:dateTime .
+
+org:at a owl:DatatypeProperty ;
+    rdfs:label "момент события"@ru ;
+    rdfs:domain org:Incident ;
+    rdfs:range xsd:dateTime .
+
+org:confirmed a owl:DatatypeProperty ;
+    rdfs:label "подтверждён"@ru ;
+    rdfs:domain org:Incident ;
+    rdfs:range xsd:boolean .
+
+org:value a owl:DatatypeProperty ;
+    rdfs:label "значение показателя"@ru ;
+    rdfs:domain org:KPI ;
+    rdfs:range xsd:decimal .
+
+#############################################################################
+# Индивиды пилотного участка: сварка рамы, смена, четыре работника,
+# три комплекта СИЗ, два инцидента и два решения
+#############################################################################
+
+org:mill a org:Enterprise ;
+    rdfs:label "Машиностроительное предприятие"@ru .
+
+org:shopWelding a org:Division ;
+    rdfs:label "Сварочно-сборочный цех"@ru ;
+    org:kind "shop" .
+
+org:sectionFrame a org:Division ;
+    rdfs:label "Участок сварки рам"@ru ;
+    org:kind "section" ;
+    org:measuredBy org:kpiInjury .
+
+org:shift1 a org:Shift ;
+    rdfs:label "Первая смена 22.11.2025"@ru ;
+    org:workDate "2025-11-22T08:00:00"^^xsd:dateTime .
+
+org:posForeman a org:Position ;
+    rdfs:label "Мастер участка"@ru ;
+    org:title "мастер участка" ;
+    org:isManager true ;
+    org:positionIn org:sectionFrame .
+
+org:posWelder a org:Position ;
+    rdfs:label "Сварщик"@ru ;
+    org:title "сварщик" ;
+    org:isManager false ;
+    org:positionIn org:sectionFrame .
+
+org:empIvanov a org:Employee ;
+    rdfs:label "Иванов И. И."@ru ;
+    org:empId 10241 ;
+    org:status "active" ;
+    org:worksIn org:sectionFrame ;
+    org:holdsPosition org:posWelder ;
+    org:hasCompetence org:compWelder .
+
+org:empPetrov a org:Employee ;
+    rdfs:label "Петров П. П."@ru ;
+    org:empId 10242 ;
+    org:status "active" ;
+    org:worksIn org:sectionFrame ;
+    org:holdsPosition org:posForeman .
+
+org:empSidorov a org:Employee ;
+    rdfs:label "Сидоров С. С."@ru ;
+    org:empId 10243 ;
+    org:status "active" ;
+    org:worksIn org:sectionFrame ;
+    org:holdsPosition org:posWelder .
+
+org:empKuznetsov a org:Employee ;
+    rdfs:label "Кузнецов К. К."@ru ;
+    org:empId 10244 ;
+    org:status "leave" ;
+    org:worksIn org:sectionFrame ;
+    org:holdsPosition org:posWelder .
+
+org:compWelder a org:Competence ;
+    rdfs:label "Допуск к электросварке"@ru ;
+    org:validUntil "2026-02-01T00:00:00"^^xsd:dateTime ;
+    org:competenceOf org:empIvanov .
+
+org:procWeldFrame a org:MainProcess ;
+    rdfs:label "Сварка рамы"@ru ;
+    org:partOfDivision org:sectionFrame ;
+    org:executedBy org:empIvanov ;
+    org:usesResource org:resWeldingPost , org:resElectrodes , org:ppeMask ;
+    org:producesProduct org:prodFrame ;
+    org:governedBy org:regOT01 .
+
+org:procRepair a org:SupportProcess ;
+    rdfs:label "Ремонт сварочного оборудования"@ru ;
+    org:partOfDivision org:sectionFrame ;
+    org:usesResource org:resWeldingPost ;
+    org:governedBy org:regOT01 .
+
+org:opTack a org:Operation ;
+    rdfs:label "Прихватка"@ru ;
+    org:normTime 4.5 .
+
+org:opWeld a org:Operation ;
+    rdfs:label "Сварка шва"@ru ;
+    org:normTime 12.5 .
+
+org:opInspect a org:Operation ;
+    rdfs:label "Контроль шва"@ru ;
+    org:normTime 5.0 .
+
+org:resWeldingPost a org:Equipment ;
+    rdfs:label "Сварочный пост"@ru ;
+    org:cost 185000.00 .
+
+org:resElectrodes a org:Material ;
+    rdfs:label "Электроды"@ru ;
+    org:cost 1200.00 .
+
+org:ppeMask a org:PPE ;
+    rdfs:label "Маска сварщика"@ru ;
+    org:class "mask" ;
+    org:nextCheck "2026-04-10T00:00:00"^^xsd:dateTime .
+
+org:ppeGloves a org:PPE ;
+    rdfs:label "Перчатки"@ru ;
+    org:class "gloves" ;
+    org:nextCheck "2026-03-15T00:00:00"^^xsd:dateTime .
+
+org:ppeShoes a org:PPE ;
+    rdfs:label "Защитная обувь"@ru ;
+    org:class "shoes" ;
+    org:nextCheck "2026-05-20T00:00:00"^^xsd:dateTime .
+
+org:prodFrame a org:Product ;
+    rdfs:label "Рама сварная"@ru ;
+    org:producedBy org:procWeldFrame .
+
+org:regOT01 a org:Regulation ;
+    rdfs:label "Инструкция по охране труда ОТ-01"@ru ;
+    org:governs org:procWeldFrame , org:procRepair .
+
+org:wo1 a org:WorkOrder ;
+    rdfs:label "Сменное задание на 22.11.2025"@ru .
+
+org:proto1 a org:Protocol ;
+    rdfs:label "Протокол инструктажа"@ru .
+
+org:inc1 a org:Incident ;
+    rdfs:label "Работа без маски"@ru ;
+    org:at "2025-11-22T09:14:00"^^xsd:dateTime ;
+    org:confirmed true ;
+    org:causedBy org:empSidorov ;
+    org:involvesResource org:ppeMask .
+
+org:inc2 a org:Incident ;
+    rdfs:label "Перчатки с износом"@ru ;
+    org:at "2025-11-22T14:40:00"^^xsd:dateTime ;
+    org:confirmed true ;
+    org:causedBy org:empKuznetsov ;
+    org:involvesResource org:ppeGloves .
+
+org:dec1 a org:Decision ;
+    rdfs:label "Выдать маску со склада"@ru ;
+    org:at "2025-11-22T10:00:00"^^xsd:dateTime ;
+    org:resolves org:inc1 .
+
+org:dec2 a org:Decision ;
+    rdfs:label "Заменить комплект перчаток"@ru ;
+    org:at "2025-11-22T15:10:00"^^xsd:dateTime ;
+    org:resolves org:inc2 .
+
+org:kpiInjury a org:KPI ;
+    rdfs:label "Доля нарушений без травм"@ru ;
+    org:value 0.94 ;
+    org:measures org:sectionFrame .
