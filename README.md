@@ -27,6 +27,7 @@ python build.py --lab 2 --no-fields  # без Word: поля/TOC останут�
 | `labs/lab3_sppr.py` | ЛР3: структурно-функциональная схема СППР мониторинга СИЗ. |
 | `labs/lab4_ontology.py` | ЛР4: онтология организационной системы (таксономия и UML). |
 | `labs/lab5_models.py` | ЛР5: системные модели (IDEF0, дерево функций, DFD, ER, UML). |
+| `figures/` | скриншоты, снятые вручную (Protégé, диаграммы средств); вставляются в отчёт как рисунки. |
 | `ontology/org.ttl` | ЛР4: онтология в OWL 2 DL (Turtle), открывается в Protégé. |
 | `report_template.docx` | эталон оформления: не перерисовывается, только `TPL`-маркеры. |
 | `update_fields.ps1`, `to_pdf.ps1` | поля/TOC и экспорт в PDF через Word. |
