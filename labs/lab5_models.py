@@ -150,14 +150,18 @@ def scheme_idef0_decomp(show=False):
         return mid
 
     links = []
-    # цепочка: выход блока i - вход блока i+1
+    # цепочка: выход блока i - вход блока i+1. Стрелка идёт строго по
+    # ортогональной ломаной: вправо в коридор между столбцами, вниз до
+    # уровня входной грани и влево в блок, поэтому наконечник направлен
+    # по горизонтали, а не по диагонали.
     chain = ["сменное задание", "кадры", "детекции СИЗ", "событие"]
     for i, text in enumerate(chain):
+        corridor = xs[i] + bw / 2 + 4
         links.append(Link(blocks[i][0], blocks[i + 1][0], text,
-                          s_side="r", t_side="l", t_off=16,
-                          via=((xs[i] + 44, ys[i]), (xs[i] + 44, ys[i + 1])),
+                          s_side="r", t_side="l",
+                          via=((corridor, ys[i]), (corridor, ys[i + 1])),
                           fs=6.2, label_at=0.5, label_ha="left",
-                          label_dx=6, label_dy=0, label_va="center"))
+                          label_dx=5, label_dy=0, label_va="center"))
 
     # внешние входы: слева, в нижнюю половину левой грани
     for mid, i, text in [("in1", 0, "сменное задание,\nдопуски"),
