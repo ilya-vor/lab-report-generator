@@ -1006,3 +1006,113 @@ def render_bars(rows, path_png, height=290.0, width=None, svg=True,
         fig.savefig(out_svg, facecolor="white")
     plt.close(fig)
     return path_png, out_svg
+
+
+# ---------------------------------------------------------------------------
+# График зависимости времени от размера задачи
+# ---------------------------------------------------------------------------
+def render_lines(series, path_png, height=250.0, width=None, svg=True,
+                 xs=None, x_labels=None, y_max=None, y_step=None,
+                 xlabel="", ylabel="", fs=6.5, title=None, log_x=False,
+                 legend_at_end=True):
+    """График нескольких зависимостей: подписи, сетка, значения в точках.
+
+    ``series`` - список ``(подпись, [y_1, ..., y_m], цвет)``; значения
+    относятся к общим абсциссам ``xs``. Подписи ставятся у последней точки
+    справа, поэтому легенда не наезжает на кривые.
+    """
+    canvas_w = width or CANVAS_W
+    fig = plt.figure(figsize=(canvas_w / 72.0, height / 72.0), dpi=DPI)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, canvas_w)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    left, right, bottom, top = 52.0, 118.0, 30.0, 18.0
+    if title:
+        top += 8.0
+        ax.text(canvas_w / 2.0, height - 8.0, title, ha="center",
+                va="center", fontsize=fs + 0.4, family=FONT,
+                color=COLORS["text"])
+    if xlabel:
+        ax.text((left + canvas_w - right) / 2.0, 8.0, xlabel, ha="center",
+                va="center", fontsize=fs, family=FONT, color=COLORS["text"])
+    if ylabel:
+        ax.text(10.0, (bottom + height - top) / 2.0, ylabel, ha="center",
+                va="center", rotation=90, fontsize=fs, family=FONT,
+                color=COLORS["text"])
+
+    xs = list(xs or range(1, len(series[0][1]) + 1))
+    n = len(xs)
+    ymax = y_max or max([max(s[1]) for s in series]) or 1.0
+    step = y_step or (ymax / 4.0)
+
+    def px(i):
+        if n == 1:
+            return (left + canvas_w - right) / 2.0
+        if log_x:
+            import math
+            lo, hi = math.log(xs[0]), math.log(xs[-1])
+            return left + (canvas_w - right - left) * \
+                (math.log(xs[i]) - lo) / (hi - lo)
+        return left + (canvas_w - right - left) * i / (n - 1.0)
+
+    def py(v):
+        return bottom + (height - top - bottom) * v / ymax
+
+    v = 0.0
+    while v <= ymax + 1e-9:
+        ax.plot([left, canvas_w - right], [py(v), py(v)], color="#e3e7ec",
+                lw=0.5, zorder=1)
+        ax.text(left - 3.0, py(v),
+                format(v, ",.0f").replace(",", " ").replace(".", ","),
+                ha="right", va="center", fontsize=fs - 0.8, family=FONT,
+                color=COLORS["muted"])
+        v += step
+
+    for i, x in enumerate(xs):
+        label = (str(x_labels[i]) if x_labels else str(x).replace(".", ","))
+        # крайние подписи прижимаются к осям, иначе они свисают за край
+        if i == 0:
+            tx, ha = left, "left"
+        elif i == n - 1:
+            tx, ha = canvas_w - right, "right"
+        else:
+            tx, ha = px(i), "center"
+        ax.text(tx, bottom - 6.0, label, ha=ha, va="center",
+                fontsize=fs - 0.8, family=FONT, color=COLORS["muted"])
+
+    ax.plot([left, left], [bottom, height - top], color=COLORS["ink"],
+            lw=0.6, zorder=2)
+    ax.plot([left, canvas_w - right], [bottom, bottom], color=COLORS["ink"],
+            lw=0.6, zorder=2)
+
+    placed = []
+    for k, (label, values, color) in enumerate(series):
+        pts = [(px(i), py(val)) for i, val in enumerate(values)]
+        ax.plot([p[0] for p in pts], [p[1] for p in pts], color=color,
+                lw=1.1, zorder=3, marker="o", markersize=2.6)
+        if legend_at_end:
+            ly = pts[-1][1]
+            # соседние подписи не должны наезжать друг на друга
+            while any(abs(ly - prev) < 9.0 for prev in placed):
+                ly -= 9.0
+            placed.append(ly)
+            ax.text(pts[-1][0] + 4.0, ly, label, ha="left",
+                    va="center", fontsize=fs - 0.4, family=FONT,
+                    color=color, zorder=4)
+        else:
+            ax.text(left + 4.0, height - top - 9.0 - 10.0 * k, label,
+                    ha="left", va="center", fontsize=fs - 0.4, family=FONT,
+                    color=color)
+
+    path_png = os.path.abspath(path_png)
+    os.makedirs(os.path.dirname(path_png), exist_ok=True)
+    fig.savefig(path_png, dpi=DPI, facecolor="white")
+    out_svg = None
+    if svg:
+        out_svg = os.path.splitext(path_png)[0] + ".svg"
+        fig.savefig(out_svg, facecolor="white")
+    plt.close(fig)
+    return path_png, out_svg

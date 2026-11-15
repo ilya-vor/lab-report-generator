@@ -221,7 +221,8 @@ class Report:
                 subs.append((TPL["teacher"], " " + m.teacher))
             for p in tbl.iter(qn("w:p")):
                 for old, new in subs:
-                    replace_across_runs(p, old, new)
+                    if replace_across_runs(p, old, new) and len(new.strip()) > 15:
+                        self._fit_title_cell(p, old, new)
             self._fix_stamp_widths(tbl)
 
     def _fit_discipline(self, paragraph, text):
@@ -241,6 +242,18 @@ class Report:
             sz = rpr.find(qn("w:sz"))
             if sz is not None and sz.get(qn("w:val")) == "28":
                 sz.set(qn("w:val"), "24")
+
+    def _fit_title_cell(self, paragraph, old, new):
+        """Уменьшает кегль ФИО на титуле, чтобы оно не переносилось.
+
+        Колонка «Фамилия И.О.» узкая: длинная фамилия с инициалами
+        («Абдрахманова Р. П.») при 12 pt вылезает за границу ячейки.
+        """
+        from docx.text.paragraph import Paragraph
+        size = max(9.0, 12.0 * len(old) / max(len(new), 1))
+        par = Paragraph(paragraph, self.doc._body)
+        for run in par.runs:
+            run.font.size = Pt(size)
 
     def _fix_stamp_widths(self, tbl):
         mapping = self.meta.stamp_widths or {}
@@ -403,6 +416,7 @@ class Report:
             pf = par.paragraph_format
             pf.first_line_indent = Cm(0)
             pf.left_indent = Cm(indent_cm)
+            pf.alignment = WD_ALIGN_PARAGRAPH.LEFT
             pf.space_before = Pt(0)
             pf.space_after = Pt(0)
             pf.line_spacing = 1.0
