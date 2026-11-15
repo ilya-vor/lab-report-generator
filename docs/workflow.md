@@ -56,10 +56,12 @@ build.py --lab N
 - `Report.prepare()`: `_clear_content` (удаляет наполнение шаблона),
   `_patch_title_page` (титул), `_compact_title` (убирает пустые абзацы).
 - Методы наполнения: `h1/h2`, `p`, `bullets`, `numbers`, `table`, `figure`,
-  `spacer`, `page_break`.
+  `spacer`.
 - `Report.save()`: сохранение и `_patch_package` - правки `header1.xml`
   (номер работы, тема, ФИО, группа в штампе), `numbering.xml` (табуляция
-  номеров разделов), `settings.xml` (`updateFields`).
+  номеров разделов), `settings.xml` (`updateFields`); затем
+  `compact_package` - выкидывает картинки шаблона, на которые больше нет
+  ссылок (3.4 МБ мусора на отчёт).
 
 ## labs/lab2_siz.py
 

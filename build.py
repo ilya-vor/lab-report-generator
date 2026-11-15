@@ -4,6 +4,7 @@
     python build.py --lab 2            # схемы + DOCX
     python build.py --lab 2 --pdf      # то же и PDF (нужен установленный Word)
     python build.py --lab 2 --no-fields  # не трогать поля и TOC
+    python build.py --compact out/x.docx  # выкинуть неиспользуемые картинки
 
 Каждая лаба - модуль из пакета ``labs`` с функцией ``build()``.
 Новая лаба: создайте ``labs/labN_<тема>.py`` (см. ``docs/next-lab.md``),
@@ -50,12 +51,21 @@ def to_pdf(path):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Сборка отчёта по лабораторной")
+    ap.add_argument("--compact", action="store_true",
+                    help="удалить из DOCX (--labs/файлов) картинки без ссылок")
     ap.add_argument("--lab", default="2", choices=sorted(LABS),
                     help="номер лабораторной работы")
     ap.add_argument("--pdf", action="store_true", help="собрать ещё и PDF")
     ap.add_argument("--no-fields", action="store_true",
                     help="не обновлять поля и содержание")
+    ap.add_argument("files", nargs="*", help="файлы DOCX для --compact")
     args = ap.parse_args(argv)
+
+    if args.compact:
+        from labkit.docxgen import compact_package
+        for path in args.files:
+            print("compact: %s -%d" % (path, compact_package(path)))
+        return 0
 
     for path in run(args.lab):
         print("DOCX:", path)

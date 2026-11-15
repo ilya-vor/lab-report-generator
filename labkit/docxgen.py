@@ -20,6 +20,8 @@
     rep.save()
 """
 import os
+import posixpath
+import re
 import zipfile
 from dataclasses import dataclass, field
 
@@ -127,18 +129,6 @@ def replace_across_runs(p, old, new):
         if old in new:      # защита от зацикливания
             break
     return count
-
-
-def replace_para(p, new):
-    """Заменяет текст абзаца целиком, сохраняя формат первого run."""
-    ts = list(p.iter(qn("w:t")))
-    if not ts:
-        return False
-    ts[0].text = new
-    ts[0].set(XML_SPACE, "preserve")
-    for t in ts[1:]:
-        t.text = ""
-    return True
 
 
 def find_para(doc, marker):
@@ -333,8 +323,14 @@ class Report:
         run.font.size = Pt(2)
         return par
 
-    def table(self, headers, rows, widths, caption=None, size=11, note=None):
-        """Таблица по ГОСТ: подпись сверху, шапка жирным, ширины в см."""
+    def table(self, headers, rows, widths, caption=None, size=11, note=None,
+              keep_together=False):
+        """Таблица по ГОСТ: подпись сверху, шапка жирным, ширины в см.
+
+        ``keep_together`` переносит таблицу на следующую страницу целиком,
+        если она не влезает: без этого от таблицы остаётся одна-две строки,
+        а на предыдущей странице появляется пустое место.
+        """
         if caption:
             cp = self.doc.add_paragraph()
             cp.paragraph_format.space_before = Pt(12)
@@ -358,6 +354,11 @@ class Report:
         for row in tbl.rows:
             for i, w in enumerate(widths):
                 row.cells[i].width = Cm(w)
+        if keep_together:
+            for row in tbl.rows[:-1]:
+                for cell in row.cells:
+                    for par in cell.paragraphs:
+                        par.paragraph_format.keep_with_next = True
         if note:
             np_ = self.doc.add_paragraph()
             nr = np_.add_run(note)
@@ -401,8 +402,22 @@ class Report:
         run.font.name = TNR
         run.font.size = Pt(12)
 
-    def page_break(self):
-        self.doc.add_page_break()
+    def formula(self, text, size=12):
+        """Формула отдельной строкой: по центру, без отступа, курсивом.
+
+        Абзац с формулой не выключается по ширине: иначе короткая строка
+        растягивается пробелами до полной ширины страницы.
+        """
+        par = self.doc.add_paragraph()
+        pf = par.paragraph_format
+        pf.first_line_indent = Cm(0)
+        pf.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        pf.space_before = Pt(6)
+        pf.space_after = Pt(6)
+        run = par.add_run(text)
+        run.font.name = TNR
+        run.font.size = Pt(size)
+        run.italic = True
 
     def code(self, text, size=9.5, indent_cm=0.6):
         """Листинг: монотипный шрифт, без отступа первой строки.
@@ -432,6 +447,7 @@ class Report:
         os.makedirs(os.path.dirname(out), exist_ok=True)
         self.doc.save(out)
         self._patch_package(out)
+        compact_package(out)
         return out
 
     def _patch_package(self, path):
@@ -484,9 +500,90 @@ class Report:
         os.replace(tmp, path)
 
 
+def _rels_owner(rels_name):
+    """Путь части, которой принадлежит файл связей.
+
+    ``word/_rels/document.xml.rels`` -> ``word/document.xml``.
+    """
+    folder, base = posixpath.split(rels_name)
+    if not folder.endswith("_rels"):
+        return None
+    owner_dir = posixpath.dirname(folder)
+    return posixpath.join(owner_dir, base[:-len(".rels")])
+
+
+_REL = re.compile(r"<Relationship\b[^>]*/>")
+_ATTR = re.compile(r'([\w:]+)="([^"]*)"')
+
+
+def compact_package(path):
+    """Выкидывает из DOCX картинки, на которые уже никто не ссылается.
+
+    Шаблон кафедры приходит вместе с демонстрационным наполнением (скриншоты
+    примера отчёта). ``Report.prepare()`` вырезает это наполнение из
+    ``document.xml``, но сами файлы остаются в пакете: в готовом отчёте
+    3.4 МБ из 4.5 - мусор. Функция удаляет связи ``media/*`` без ссылок в
+    XML-владельце, а затем и сами файлы без оставшихся связей.
+
+    Возвращает число удалённых частей пакета.
+    """
+    zin = zipfile.ZipFile(path)
+    infos = zin.infolist()
+    parts = {i.filename: zin.read(i.filename) for i in infos}
+    zin.close()
+
+    dropped = 0
+    for rels_name in [n for n in parts if n.endswith(".rels")]:
+        owner = _rels_owner(rels_name)
+        if owner not in parts:
+            continue
+        owner_xml = parts[owner].decode("utf-8")
+
+        def keep(match, owner_xml=owner_xml):
+            attrs = dict(_ATTR.findall(match.group(0)))
+            target = attrs.get("Target", "")
+            if attrs.get("TargetMode") == "External" or "media/" not in target:
+                return match.group(0)
+            if '"%s"' % attrs.get("Id") in owner_xml:
+                return match.group(0)
+            return ""
+
+        rels = parts[rels_name].decode("utf-8")
+        new_rels = _REL.sub(keep, rels)
+        if new_rels != rels:
+            parts[rels_name] = new_rels.encode("utf-8")
+
+    # что осталось нужным после чистки связей
+    used = set()
+    for rels_name, data in parts.items():
+        if not rels_name.endswith(".rels"):
+            continue
+        owner = _rels_owner(rels_name)
+        if owner is None:
+            continue
+        base = posixpath.dirname(owner)
+        for target in re.findall(r'Target="([^"]*media/[^"]*)"',
+                                 data.decode("utf-8")):
+            used.add(posixpath.normpath(posixpath.join(base, target)))
+
+    media = [n for n in parts
+             if "/media/" in n and posixpath.normpath(n) not in used]
+    for name in media:
+        del parts[name]
+        dropped += 1
+
+    if dropped:
+        tmp = path + ".tmp"
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in infos:
+                if item.filename in parts:
+                    zout.writestr(item, parts[item.filename])
+        os.replace(tmp, path)
+    return dropped
+
+
 def _para_chunks(xml):
     """Делит XML на куски по абзацам: (фрагмент, текст абзаца)."""
-    import re
     parts = re.split(r"(<w:p\b.*?</w:p>)", xml, flags=re.S)
     out = []
     for chunk in parts:
@@ -500,7 +597,6 @@ def _para_chunks(xml):
 
 def _scale_sizes(chunk, ratio, minimum=10):
     """Уменьшает кегль в абзаце (w:sz задан в полупунктах)."""
-    import re
 
     def sub(m):
         val = int(m.group(2))
@@ -560,7 +656,6 @@ def _replace_group_runs(xml, old, new):
     внутри одного w:p собирает w:t, находит old, раскладывает new.
     Разбиение по абзацам сохраняется.
     """
-    import re
     parts = re.split(r"(</w:p>)", xml)
     out = []
     for chunk in parts:

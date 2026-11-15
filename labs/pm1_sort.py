@@ -194,12 +194,6 @@ def run_benchmark(force=False):
     return data
 
 
-def load_benchmark():
-    """Читает готовые замеры (для сборки отчёта)."""
-    with open(CACHE, encoding="utf-8") as f:
-        return json.load(f)
-
-
 if __name__ == "__main__":
     import sys
     run_benchmark(force="--force" in sys.argv)
