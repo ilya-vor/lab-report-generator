@@ -25,6 +25,7 @@ LABS = {
     "5": "labs.lab5_models",
     "6": "labs.lab6_efficiency",
     "pm1": "labs.lab_pm1",
+    "slae": "labs.lab_slae",
 }
 
 
