@@ -26,6 +26,7 @@ LABS = {
     "6": "labs.lab6_efficiency",
     "pm1": "labs.lab_pm1",
     "risk1": "labs.lab_risk",
+    "risk2": "labs.lab_dominance",
     "slae": "labs.lab_slae",
 }
 

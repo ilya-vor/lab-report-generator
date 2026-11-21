@@ -57,6 +57,29 @@ TPL = {
 # и титул уезжает на вторую страницу.
 STAMP_WIDTHS = {1534: 2169, 273: 283, 2603: 1958, 2757: 3402}
 
+# Пустые колонтитулы для отчётов без ГОСТ-рамки: рамка и штамп живут в
+# шапке шаблона, поэтому при frame=False шапки заменяются на пустые, а номер
+# страницы переносится в нижний колонтитул.
+BLANK_HDR = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    '<w:p/></w:hdr>'
+)
+
+PAGE_FTR = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    '<w:p><w:pPr><w:jc w:val="center"/>'
+    '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+    '<w:sz w:val="24"/></w:rPr></w:pPr>'
+    '<w:fldSimple w:instr=" PAGE "><w:r><w:rPr>'
+    '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+    '<w:sz w:val="24"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>'
+)
+
+
 
 @dataclass
 class ReportMeta:
@@ -71,6 +94,7 @@ class ReportMeta:
     teacher: str = TPL["teacher"]
     group: str = TPL["group"]
     student: str = TPL["student"]
+    frame: bool = True              # ГОСТ-рамка со штампом в колонтитулах
     out_name: str = "report.docx"
     template: str = TEMPLATE
     out_dir: str = OUT_DIR
@@ -458,7 +482,12 @@ class Report:
         zout = zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED)
         for item in zin.infolist():
             data = zin.read(item.filename)
-            if item.filename == "word/header1.xml":
+            if not m.frame and item.filename in ("word/header1.xml",
+                                                 "word/header2.xml"):
+                data = BLANK_HDR.encode("utf-8")
+            elif not m.frame and item.filename == "word/footer1.xml":
+                data = PAGE_FTR.encode("utf-8")
+            elif item.filename == "word/header1.xml":
                 s = data.decode("utf-8")
                 if m.lab_no and m.lab_no != TPL["lab_no"]:
                     s = s.replace("работа №" + TPL["lab_no"],
