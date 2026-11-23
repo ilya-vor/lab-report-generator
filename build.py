@@ -29,6 +29,7 @@ LABS = {
     "risk2": "labs.lab_dominance",
     "risk3": "labs.lab_utility",
     "risk4": "labs.lab4_generalizations",
+    "risk56": "labs.lab56_uncertainty",
     "slae": "labs.lab_slae",
 }
 
