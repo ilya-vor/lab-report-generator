@@ -27,6 +27,8 @@ LABS = {
     "pm1": "labs.lab_pm1",
     "risk1": "labs.lab_risk",
     "risk2": "labs.lab_dominance",
+    "risk3": "labs.lab_utility",
+    "risk4": "labs.lab4_generalizations",
     "slae": "labs.lab_slae",
 }
 
