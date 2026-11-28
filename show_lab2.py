@@ -1,184 +1,95 @@
 # -*- coding: utf-8 -*-
-"""Показать результаты ЛР №2 «Стохастическое доминирование» без файлов.
+"""Показать результаты ЛР №2 «Стохастическое доминирование» без отчёта.
 
-Аналог ``kod/show_lab.py`` для второй лабораторной работы: скрипт заново
-считает законы распределения дневных доходностей, печатает таблицы 1-7 в
-консоль и открывает рисунки 1-7 в отдельных окнах matplotlib. Ничего не
-сохраняется на диск.
+Скрипт заново считает законы распределения доходностей, печатает три
+таблицы в консоль и открывает рисунки 1-7 в окнах matplotlib.
+Ничего не сохраняется на диск.
 
 Запуск:
-
     python show_lab2.py
-    python show_lab2.py --data labs/data/risk_quotes.csv
-    python show_lab2.py --no-figures
-    python show_lab2.py --no-tables
-
-Окна нужно закрыть вручную; после последнего окна скрипт завершится.
+    python show_lab2.py --no-figures   # только таблицы
 """
 import argparse
 import sys
+
+import matplotlib.pyplot as plt
 
 from labs import dominance, risk_data, risk_measures
 from labs import lab_dominance as view
 
 
-# ---------------------------------------------------------------------------
-# Печать таблиц в Markdown
-# ---------------------------------------------------------------------------
-def md_table(header, rows, align=None):
-    """Таблица в Markdown: как tables.md у первой лабораторной."""
-    align = align or ["---"] * len(header)
+def md(header, rows):
+    """Таблица в Markdown: шапка, разделитель, строки."""
     lines = ["| " + " | ".join(header) + " |",
-             "|" + "|".join(align) + "|"]
-    lines += ["| " + " | ".join(map(str, row)) + " |" for row in rows]
+             "|" + "|".join(["---"] * len(header)) + "|"]
+    for row in rows:
+        lines.append("| " + " | ".join(str(v) for v in row) + " |")
     return "\n".join(lines)
 
 
-def print_tables(series_list, profiles, dists, comparisons, pairs):
-    """Печатает таблицы 1-7 так же, как они выглядят в отчёте."""
-    label = lambda t: view.LABELS.get(t, t)
-
-    print("## Таблица 1. Характеристики дневных доходностей, %\n")
-    rows = []
-    for ticker in series_list:
-        prof = profiles[ticker]
-        rows.append((
-            "%s (%s)" % (label(ticker), ticker),
-            view.pct(prof["mean"], 3),
-            view.pct(prof["std"], 3),
-            view.pct(prof["var"][0.99], 2),
-            view.pct(dists[ticker].F(0.0), 2),
-            view.pct(dists[ticker].F(-0.03), 2),
-        ))
-    print(md_table(("Акция", "E(X)", "Std", "VaR(0,99)", "P(X ≤ 0)",
-                    "P(X ≤ −3)"), rows,
-                   ("---", "---:", "---:", "---:", "---:", "---:")))
-
-    for i, ticker in enumerate(series_list, 2):
-        dist = dists[ticker]
-        print("\n## Таблица %d. Закон распределения доходности %s\n"
-              % (i, label(ticker)))
-        rows = []
-        for j, (x, p, f) in enumerate(zip(dist.x, dist.p, dist.cum)):
-            left = dist.edges[j]
-            right = dist.edges[j + 1]
-            rows.append(("[%s; %s%s" % (view.pct(left), view.pct(right),
-                                        "]" if j == len(dist.x) - 1 else ")"),
-                         view.pct(x, 2), view.ru(p, 4), view.ru(f, 4)))
-        print(md_table(("Интервал, %", "x_j, %", "p_j", "F(x_j)"), rows,
-                       ("---", "---:", "---:", "---:")))
-
-    total = len(series_list) + 2
-    print("\n## Таблица %d. Проверка критериев для трёх пар\n" % total)
-    rows = []
-    for a, b in pairs:
-        item = comparisons[(a, b)]
-        first, second = item["first"], item["second"]
-        roots = ", ".join(view.ru(x * 100.0, 2) for x in second["crossings"])
-        rows.append((
-            "%s – %s" % (label(a), label(b)),
-            "%s @ %s" % (view.pct(first["max"], 2),
-                         view.pct(first["argmax"], 2)),
-            "%s @ %s" % (view.pct(first["min"], 2),
-                         view.pct(first["argmin"], 2)),
-            "%s @ %s" % (view.ru(second["max"] * 100.0, 3),
-                         view.pct(second["argmax"], 2)),
-            "%s @ %s" % (view.ru(second["min"] * 100.0, 3),
-                         view.pct(second["argmin"], 2)),
-            roots or "нет",
-            "нет" if first["verdict"] == "none" else "есть",
-            "нет" if second["verdict"] == "none" else "есть",
-        ))
-    print(md_table(("Пара", "max(F₁−F₂), %", "min(F₁−F₂), %", "max ∫, п.п.",
-                    "min ∫, п.п.", "∫ = 0 при t, %", "СД-1", "СД-2"), rows))
-
-
-# ---------------------------------------------------------------------------
-# Окна с рисунками
-# ---------------------------------------------------------------------------
-def show_figures(dists, comparisons, pairs):
-    """Открывает рисунки 1-7 в интерактивных окнах matplotlib."""
-    import matplotlib.pyplot as plt
-
-    # Модуль отчёта включает Agg при импорте; для окон нужен интерактивный
-    # бэкенд, поэтому переключаем его на лету.
-    for backend in ("TkAgg", "QtAgg", "Qt5Agg", "GTK3Agg", "WXAgg"):
-        try:
-            plt.switch_backend(backend)
-            break
-        except Exception:
-            continue
-
-    figures, titles = [], []
-
-    def add(fig, title):
-        figures.append(fig)
-        titles.append(title)
-
-    add(view.fig_all(dists),
-        "Рисунок 1. Функции распределения трёх акций")
-    for index, (a, b) in enumerate(pairs, 2):
-        add(view.fig_cdf(a, b, dists),
-            "Рисунок %d. Функции распределения %s и %s"
-            % (index, view.LABELS.get(a, a), view.LABELS.get(b, b)))
-    for index, (a, b) in enumerate(pairs, len(pairs) + 2):
-        add(view.fig_diff(a, b, comparisons[(a, b)]),
-            "Рисунок %d. Разность функций распределения %s и %s"
-            % (index, view.LABELS.get(a, a), view.LABELS.get(b, b)))
-
-    for figure, title in zip(figures, titles):
-        manager = getattr(figure.canvas, "manager", None)
-        if manager is not None:
-            manager.set_window_title(title)
-    print("Открыто окон: %d. Закройте их, чтобы завершить скрипт."
-          % len(figures))
-    sys.stdout.flush()
-    plt.show()
-
-
-# ---------------------------------------------------------------------------
-# Запуск
-# ---------------------------------------------------------------------------
-def main(argv=None):
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    parser = argparse.ArgumentParser(
-        description="Показать таблицы и рисунки ЛР «Стохастическое "
-                    "доминирование»")
-    parser.add_argument("--data", default=None,
-                        help="CSV с ценами закрытия (по умолчанию файл "
-                             "первой лабораторной работы)")
-    parser.add_argument("--no-tables", action="store_true",
-                        help="не печатать таблицы")
+def main():
+    parser = argparse.ArgumentParser(description="ЛР №2 без сборки отчёта")
     parser.add_argument("--no-figures", action="store_true",
                         help="не открывать окна с рисунками")
-    args = parser.parse_args(argv)
+    args = parser.parse_args()
 
-    if args.data:
-        dates, prices = risk_data.load_csv(args.data)
-        data = {t: risk_data.returns(s) for t, s in prices.items()}
-    else:
-        dates, data = risk_data.load()
+    # 1. Данные: дневные доходности трёх акций.
+    dates, data = risk_data.load()
+    tickers = list(risk_data.TICKERS)
+    print("Наблюдений: %d (%s … %s)\n" % (len(dates), dates[0], dates[-1]))
 
-    series_list = [t for t in risk_data.TICKERS if t in data]
-    series = {t: risk_measures.variation_series(data[t]) for t in series_list}
-    dists, comparisons, _ = dominance.build(series_list, series)
-    # порядок пар как в отчёте: нумерация рисунков 2-4 и 5-7 совпадает
-    pairs = [pair for pair in view.ORDER if pair in comparisons]
-    profiles = {t: {
-        "mean": risk_measures.grouped_moments(series[t])[0],
-        "std": risk_measures.grouped_moments(series[t])[1] ** 0.5,
-        "var": {a: risk_measures.grouped_var(
-            risk_measures.grouped_loss_series(series[t]), a)
-            for a in (0.99,)},
-    } for t in series_list}
+    # 2. Законы распределения, разности F и проверка критериев.
+    series = {t: risk_measures.variation_series(data[t]) for t in tickers}
+    dists, comps, _ = dominance.build(tickers, series)
+    pairs = [pair for pair in view.ORDER if pair in comps]
 
-    print("Наблюдений: %d, период: %s … %s\n"
-          % (len(dates), dates[0], dates[-1]))
-    if not args.no_tables:
-        print_tables(series_list, profiles, dists, comparisons, pairs)
-    if not args.no_figures:
-        show_figures(dists, comparisons, pairs)
+    # 3. Таблица 1: характеристики доходностей.
+    profile = risk_measures.compute(data)
+    rows = []
+    for t in tickers:
+        prof = profile[t]["profile"]
+        rows.append((t, view.pct(prof["mean"], 3), view.pct(prof["std"], 3),
+                     view.pct(prof["var_"][0.99], 2)))
+    print(md(("Акция", "E(X), %", "Std, %", "VaR(0,99), %"), rows))
+
+    # 4. Таблица 2: законы распределения (x_j, p_j, F(x_j)).
+    for t in tickers:
+        dist = dists[t]
+        rows = [(view.pct(x, 2), view.ru(p, 4), view.ru(f, 4))
+                for x, p, f in zip(dist.x, dist.p, dist.cum)]
+        print("\n## %s\n" % view.LABELS[t])
+        print(md(("x_j, %", "p_j", "F(x_j)"), rows))
+
+    # 5. Таблица 3: итоги проверки критериев по трём парам.
+    rows = []
+    for a, b in pairs:
+        d = comps[(a, b)]
+        rows.append(("%s – %s" % (view.LABELS[a], view.LABELS[b]),
+                     view.pct(d["first"]["max"], 2),
+                     view.pct(d["first"]["min"], 2),
+                     view.ru(d["second"]["max"] * 100.0, 3),
+                     view.ru(d["second"]["min"] * 100.0, 3),
+                     "нет" if d["second"]["verdict"] == "none" else "есть"))
+    print("\n## Проверка критериев\n")
+    print(md(("Пара", "max(F₁−F₂), %", "min(F₁−F₂), %",
+              "max ∫, п.п.", "min ∫, п.п.", "СД-2"), rows))
+
+    if args.no_figures:
+        return 0
+
+    # 6. Рисунки: 1 - три F(x), 2-4 - пары F(x), 5-7 - разности F₁ − F₂.
+    try:
+        plt.switch_backend("TkAgg")   # окна, а не сохранение в файлы
+    except Exception:
+        pass
+    figs = [view.fig_all(dists)]
+    figs += [view.fig_cdf(a, b, dists) for a, b in pairs]
+    figs += [view.fig_diff(a, b, comps[(a, b)]) for a, b in pairs]
+    for i, fig in enumerate(figs, 1):
+        fig.canvas.manager.set_window_title("Рисунок %d" % i)
+    print("\nОткрыто окон: %d. Закройте их, чтобы выйти." % len(figs))
+    sys.stdout.flush()
+    plt.show()
     return 0
 
 
