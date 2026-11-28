@@ -7,11 +7,7 @@
 
 Запуск:
     python show_lab2.py
-    python show_lab2.py --no-figures   # только таблицы
 """
-import argparse
-import sys
-
 import matplotlib.pyplot as plt
 
 from labs import dominance, risk_data, risk_measures
@@ -28,11 +24,6 @@ def md(header, rows):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ЛР №2 без сборки отчёта")
-    parser.add_argument("--no-figures", action="store_true",
-                        help="не открывать окна с рисунками")
-    args = parser.parse_args()
-
     # 1. Данные: дневные доходности трёх акций.
     dates, data = risk_data.load()
     tickers = list(risk_data.TICKERS)
@@ -74,9 +65,6 @@ def main():
     print(md(("Пара", "max(F₁−F₂), %", "min(F₁−F₂), %",
               "max ∫, п.п.", "min ∫, п.п.", "СД-2"), rows))
 
-    if args.no_figures:
-        return 0
-
     # 6. Рисунки: 1 - три F(x), 2-4 - пары F(x), 5-7 - разности F₁ − F₂.
     try:
         plt.switch_backend("TkAgg")   # окна, а не сохранение в файлы
@@ -88,7 +76,6 @@ def main():
     for i, fig in enumerate(figs, 1):
         fig.canvas.manager.set_window_title("Рисунок %d" % i)
     print("\nОткрыто окон: %d. Закройте их, чтобы выйти." % len(figs))
-    sys.stdout.flush()
     plt.show()
     return 0
 
