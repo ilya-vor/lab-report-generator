@@ -78,7 +78,7 @@ class Distribution:
         return total + level * (x - self.x[-1])
 
 
-def analyse(diffs, grid, tol=1e-9, step=False):
+def analyse(diffs, grid, tol=1e-9):
     """Экстремумы разности, точки перемены знака, вердикт."""
     lo = min(range(len(diffs)), key=lambda i: diffs[i])
     hi = max(range(len(diffs)), key=lambda i: diffs[i])
@@ -88,8 +88,7 @@ def analyse(diffs, grid, tol=1e-9, step=False):
         if sign and previous is not None and sign != previous:
             span = diffs[i] - diffs[i - 1]
             ratio = -diffs[i - 1] / span if span else 0.0
-            crossings.append(grid[i] if step else
-                             grid[i - 1] + ratio * (grid[i] - grid[i - 1]))
+            crossings.append(grid[i - 1] + ratio * (grid[i] - grid[i - 1]))
         previous = sign or previous
     return {"min": diffs[lo], "max": diffs[hi], "argmin": grid[lo],
             "argmax": grid[hi], "crossings": crossings,
@@ -106,7 +105,7 @@ def compare(a, b, points=1600):
     d1 = [a.F(x) - b.F(x) for x in grid]
     d2 = [a.S(x) - b.S(x) for x in grid]
     return {"grid": grid, "d1": d1,
-            "first": analyse(d1, grid, step=True), "second": analyse(d2, grid)}
+            "first": analyse(d1, grid), "second": analyse(d2, grid)}
 
 
 def ru(value, digits=2):
