@@ -16,8 +16,10 @@
 
 Запуск:  python build.py --lab risk2
 """
+import inspect
 import math
 import os
+import textwrap
 
 import matplotlib
 matplotlib.use("Agg")
@@ -49,6 +51,33 @@ SUBTITLES = {
     ("BAYN.DE", "SAN.PA"): "Сравнение Sanofi с Bayer",
 }
 ORDER = [("BAYN.DE", "MRK"), ("MRK", "SAN.PA"), ("BAYN.DE", "SAN.PA")]
+
+
+# ---------------------------------------------------------------------------
+# Листинги: исходный текст берётся из модуля расчётов
+# ---------------------------------------------------------------------------
+def listing_src(func):
+    """Исходный текст функции без докстроки - для листинга в отчёте."""
+    lines = textwrap.dedent(inspect.getsource(func)).split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.lstrip()
+        if stripped.startswith(('"""', "'''")):
+            quote = stripped[:3]
+            if stripped.count(quote) >= 2 and len(stripped.strip()) > 3:
+                i += 1
+                continue
+            i += 1
+            while i < len(lines) and quote not in lines[i]:
+                i += 1
+            i += 1
+            continue
+        out.append(line)
+        i += 1
+    while out and not out[-1].strip():
+        out.pop()
+    return "\n".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +438,14 @@ def build_content(rep, dates, data, result, dists, comparisons):
           "лучи (−∞; x_1) и [x_10; +∞).")
     for ticker in TICKERS:
         rep.formula_block(cdf_formula(ticker, dists[ticker]), size=10)
+    rep.p("Закон распределения и функция F(x) строятся по частотам ряда "
+          "(листинг 1): в точке x_j функция делает скачок на p_j, поэтому её "
+          "значение находится двоичным поиском.")
+    rep.listing(
+        listing_src(dominance.Distribution.__init__) + "\n\n"
+        + listing_src(dominance.Distribution.F),
+        caption="Листинг 1. Построение закона распределения и функции F(x)",
+        size=8.5)
 
     # ------------------------------------------------------------------
     rep.h2("Критерий стохастического доминирования 1-го порядка")
@@ -421,6 +458,12 @@ def build_content(rep, dates, data, result, dists, comparisons):
           "предпочтительнее одна бумага, правее - другая, и доминирования "
           "нет. На рисунках 2-4 приведены попарные графики функций "
           "распределения.")
+    rep.p("Проверка критерия сводится к поиску экстремумов разности "
+          "F_A\u00a0−\u00a0F_B и её точек перемены знака (листинг 2); для "
+          "ступенчатой разности переход через ноль происходит в узле сетки.")
+    rep.listing(listing_src(dominance.analyse),
+                caption="Листинг 2. Экстремумы и точки перемены знака разности",
+                size=8.5)
 
     for index, (a, b) in enumerate(ORDER, 2):
         item = compare(a, b)
@@ -474,6 +517,13 @@ def build_content(rep, dates, data, result, dists, comparisons):
           "поэтому в области около нуля предпочтительнее менее рискованная "
           "бумага; при больших t интеграл ведёт себя как t\u00a0−\u00a0E(X) и "
           "преимущество получает бумага с большей средней доходностью.")
+    rep.p("Интеграл ступенчатой разности считается аналитически (листинг 3): "
+          "каждый скачок разности в точке u даёт слагаемое c_u·(t\u00a0−\u00a0u)₊.")
+    rep.listing(
+        listing_src(dominance.Distribution.S) + "\n\n"
+        + listing_src(dominance.integral_terms),
+        caption="Листинг 3. Интеграл функции распределения и разности F_A − F_B",
+        size=8.5)
 
 
     for index, (a, b) in enumerate(ORDER, 5):

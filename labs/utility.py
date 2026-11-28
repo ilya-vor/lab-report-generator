@@ -70,13 +70,15 @@ def absolute_risk_aversion(x):
 def power_integral(a, b):
     """Точный интеграл u(x) = sign(x)|x|^0,2 на отрезке [a; b].
 
-    Первообразная равна (5/6)·sign(x)·|x|^1,2, поэтому интегрирование по
-    интервалу вариационного ряда выполняется без квадратуры: подынтегральная
-    функция имеет бесконечную производную в нуле, и любой численный метод
-    на интервале, содержащем нуль, сходится медленно.
+    Первообразная равна |x|^1,2 / 1,2: при x > 0 это (x^1,2)/1,2, при x < 0
+    она также положительна, но с обратным знаком аргумента, поэтому
+    производная равна sign(x)·|x|^0,2. Интегрирование по интервалу
+    вариационного ряда выполняется без квадратуры: подынтегральная функция
+    имеет бесконечную производную в нуле, и любой численный метод на
+    интервале, содержащем нуль, сходится медленно.
     """
     def antiderivative(x):
-        return math.copysign(abs(x) ** (POWER + 1.0), x) / (POWER + 1.0)
+        return abs(x) ** (POWER + 1.0) / (POWER + 1.0)
 
     return antiderivative(b) - antiderivative(a)
 
@@ -120,6 +122,18 @@ def interval_integral(func, a, b):
     return 0.5 * half * acc
 
 
+def mean_utility(series, func, index, scale=100.0):
+    """Среднее значение полезности на интервале с номером ``index``.
+
+    Внутри интервала распределение равномерно, поэтому среднее равно
+    (1 / h_j) · ∫ u(x) dx. Именно оно, а не значение в середине, входит
+    в критерий Vu(X).
+    """
+    a = series["edges"][index] * scale
+    b = series["edges"][index + 1] * scale
+    return interval_integral(func, a, b) / (b - a)
+
+
 def expected_utility(series, func, scale=100.0):
     """Vu = E[u(X)] по интервальному ряду.
 
@@ -131,9 +145,20 @@ def expected_utility(series, func, scale=100.0):
     """
     total = 0.0
     for j, p in enumerate(series["freq"]):
-        a = series["edges"][j] * scale
-        b = series["edges"][j + 1] * scale
-        total += p * interval_integral(func, a, b) / (b - a)
+        total += p * mean_utility(series, func, j, scale)
+    return total
+
+
+def midpoint_utility(series, func, scale=100.0):
+    """Vu при замене интервала его серединой (метод середин).
+
+    Так считают, когда интеграла под рукой нет: Vu = Σ p_j · u(x_j).
+    Для функции варианта метод даёт систематическую ошибку, потому что
+    среднее корня по интервалу не равно корню из середины.
+    """
+    total = 0.0
+    for j, p in enumerate(series["freq"]):
+        total += p * func(series["mids"][j] * scale)
     return total
 
 
@@ -257,6 +282,41 @@ class InterpolatedUtility:
         return a + (b - a) * (value - fa) / (fb - fa) if fb != fa else a
 
 
+class LinearUtility:
+    """Кусочно-линейная интерполяция точек полезности.
+
+    Используется только для сравнения со сплайном: ломаная проходит через
+    те же точки, но в узлах имеет изломы, поэтому вторая производная там
+    не определена и вогнутость между узлами не гарантирована.
+    """
+
+    def __init__(self, points):
+        self.xs = [p[0] for p in points]
+        self.ys = [p[1] for p in points]
+
+    def __call__(self, x):
+        xs, ys = self.xs, self.ys
+        if x <= xs[0]:
+            return ys[0]
+        if x >= xs[-1]:
+            return ys[-1]
+        i = bisect.bisect_right(xs, x) - 1
+        h = xs[i + 1] - xs[i]
+        return ys[i] + (ys[i + 1] - ys[i]) * (x - xs[i]) / h
+
+    def integral(self, a, b):
+        """Интеграл ломаной: сумма площадей трапеций по её звеньям."""
+        if b < a:
+            a, b = b, a
+        bounds = [a] + [x for x in self.xs if a < x < b] + [b]
+        total = 0.0
+        for left, right in zip(bounds, bounds[1:]):
+            if right <= left:
+                continue
+            total += 0.5 * (self(left) + self(right)) * (right - left)
+        return total
+
+
 # ---------------------------------------------------------------------------
 # Полный расчёт по всем бумагам
 # ---------------------------------------------------------------------------
@@ -266,8 +326,9 @@ def build(tickers, data, k0=None, steps=1):
     ``data`` - {тикер: [дневная доходность, ...]}. Возвращает словарь:
     ``k0`` - исходное число интервалов (Стерджис), ``ks`` - сетка k,
     ``lo``/``hi`` - границы общей шкалы полезности, ``knots`` - точки
-    эмпирической полезности, ``u_pow``/``u_emp`` - функции, ``series`` -
-    {тикер: ряд при k0}, ``vu``/``vu_emp`` - {тикер: значение}, ``ce`` -
+    эмпирической полезности, ``u_pow``/``u_emp``/``u_lin`` - функции, ``series`` -
+    {тикер: ряд при k0}, ``vu``/``vu_emp``/``vu_lin`` - {тикер: значение},
+    ``vu_mid``/``vu_emp_mid`` - те же критерии методом середин, ``ce`` -
     {тикер: эквивалент уверенности}, ``sens`` - {k: {тикер: (Vu, Vu_emp)}}.
     """
     from labs import risk_measures
@@ -280,10 +341,14 @@ def build(tickers, data, k0=None, steps=1):
     u_pow = power_utility
     knots = utility_knots(lo, hi)
     u_emp = InterpolatedUtility(knots)
+    u_lin = LinearUtility(knots)
 
     series = {t: risk_measures.variation_series(data[t], k0) for t in tickers}
     vu = {t: expected_utility(series[t], u_pow) for t in tickers}
     vu_emp = {t: expected_utility(series[t], u_emp) for t in tickers}
+    vu_lin = {t: expected_utility(series[t], u_lin) for t in tickers}
+    vu_mid = {t: midpoint_utility(series[t], u_pow) for t in tickers}
+    vu_emp_mid = {t: midpoint_utility(series[t], u_emp) for t in tickers}
     ce = {t: u_emp.inverse(vu_emp[t]) for t in tickers}
 
     k_lo = int(round(0.5 * k0))
@@ -308,9 +373,13 @@ def build(tickers, data, k0=None, steps=1):
         "knots": knots,
         "u_pow": u_pow,
         "u_emp": u_emp,
+        "u_lin": u_lin,
         "series": series,
         "vu": vu,
         "vu_emp": vu_emp,
+        "vu_lin": vu_lin,
+        "vu_mid": vu_mid,
+        "vu_emp_mid": vu_emp_mid,
         "ce": ce,
         "sens": sens,
     }

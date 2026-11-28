@@ -535,6 +535,20 @@ class Report:
             run.font.size = Pt(size)
         self.spacer(10)
 
+    def listing(self, text, caption=None, size=9):
+        """Листинг программы: подпись сверху, монотипный шрифт."""
+        if caption:
+            cp = self.doc.add_paragraph()
+            pf = cp.paragraph_format
+            pf.first_line_indent = Cm(0)
+            pf.space_before = Pt(10)
+            pf.space_after = Pt(3)
+            pf.keep_with_next = True
+            cr = cp.add_run(caption)
+            cr.font.name = TNR
+            cr.font.size = Pt(11)
+        self.code(text, size=size)
+
     # ---------------- сохранение ----------------
     def save(self):
         out = self.meta.out_path
