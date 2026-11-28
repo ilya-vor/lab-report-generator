@@ -23,7 +23,6 @@ COLOR = {"BAYN.DE": "#1f4e79", "MRK": "#b06a2c", "SAN.PA": "#2e7d32"}
 
 
 def load_prices(path=CSV_PATH):
-    """CSV: колонка date и колонки тикеров. -> (даты, {тикер: цены})."""
     rows = list(csv.reader(open(path, encoding="utf-8")))
     names = [name.strip() for name in rows[0][1:]]
     dates = [row[0] for row in rows[1:]]
@@ -33,7 +32,6 @@ def load_prices(path=CSV_PATH):
 
 
 def variation_series(values):
-    """Интервальный ряд: k по Стерджессу, середины, частоты, накопленные."""
     n = len(values)
     k = max(1, int(round(1.0 + 3.322 * math.log10(n))))
     lo, hi = min(values), max(values)
@@ -51,22 +49,18 @@ def variation_series(values):
 
 
 class Distribution:
-    """Дискретная величина: значения x_j, вероятности p_j; F ступенчата."""
 
     def __init__(self, series):
         self.x, self.p, self.cum = series["x"], series["p"], series["cum"]
 
     def F(self, x):
-        """P(X <= x) - накопленная вероятность."""
         return sum(p for value, p in zip(self.x, self.p) if value <= x)
 
     def jump(self, x):
-        """Скачок F в точке x (0, если такой середины нет)."""
         return sum(p for value, p in zip(self.x, self.p)
                    if abs(value - x) < 1e-12)
 
     def S(self, x):
-        """Интеграл F от -oo до x - площадь под ступеньками."""
         total = level = 0.0
         previous = self.x[0]
         for value, p in zip(self.x, self.p):
@@ -79,7 +73,6 @@ class Distribution:
 
 
 def analyse(diffs, grid, tol=1e-9):
-    """Экстремумы разности, точки перемены знака, вердикт."""
     lo = min(range(len(diffs)), key=lambda i: diffs[i])
     hi = max(range(len(diffs)), key=lambda i: diffs[i])
     signs = [1 if v > tol else (-1 if v < -tol else 0) for v in diffs]
@@ -97,7 +90,6 @@ def analyse(diffs, grid, tol=1e-9):
 
 
 def compare(a, b, points=1600):
-    """Разности F_A - F_B и их интегралы на общей сетке точек."""
     lo, hi = min(a.x[0], b.x[0]), max(a.x[-1], b.x[-1])
     grid = sorted(set(a.x) | set(b.x)
                   | {lo + (hi - lo) * i / float(points)
@@ -109,7 +101,6 @@ def compare(a, b, points=1600):
 
 
 def ru(value, digits=2):
-    """Русская запись числа: запятая в дроби, минус U+2212."""
     text = ("%.*f" % (digits, value)).replace(".", ",")
     return "\u2212" + text[1:] if text.startswith("-") else text
 
@@ -119,7 +110,6 @@ def pct(value, digits=2):
 
 
 def md(header, rows):
-    """Таблица в Markdown."""
     lines = ["| " + " | ".join(header) + " |",
              "|" + "|".join(["---"] * len(header)) + "|"]
     lines += ["| " + " | ".join(str(v) for v in row) + " |" for row in rows]
@@ -127,7 +117,6 @@ def md(header, rows):
 
 
 def plot(dists, pairs, comps):
-    """Рисунки 1-7: три F, пары F, разности F_A - F_B."""
     figs = []
 
     def new(title, height=3.2):
