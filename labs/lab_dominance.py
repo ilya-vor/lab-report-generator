@@ -151,7 +151,8 @@ def _cdf_points(dist):
 # ---------------------------------------------------------------------------
 # Рисунок 1: три функции распределения
 # ---------------------------------------------------------------------------
-def chart_all(dists, number=1):
+def fig_all(dists):
+    """Рисунок 1: три функции распределения (без сохранения)."""
     fig, ax = plt.subplots(figsize=(16.5 / 2.54, 6.2 / 2.54), dpi=DPI)
     fig.subplots_adjust(left=0.09, right=0.985, top=0.90, bottom=0.16)
     for ticker in TICKERS:
@@ -166,6 +167,12 @@ def chart_all(dists, number=1):
               prop={"family": FONT, "size": 8})
     _style_axes(ax, range(-10, 13, 2), "F(x)", yformatter=axis_unit)
     ax.yaxis.set_major_locator(MultipleLocator(0.2))
+    return fig
+
+
+def chart_all(dists, number=1):
+    """Рисунок 1: сохраняет PNG и возвращает путь к нему."""
+    fig = fig_all(dists)
     path = os.path.join(OUT_DIR, "dom_fig%d.png" % number)
     os.makedirs(OUT_DIR, exist_ok=True)
     fig.savefig(path, facecolor="white")
@@ -176,7 +183,8 @@ def chart_all(dists, number=1):
 # ---------------------------------------------------------------------------
 # Рисунок пары: две функции распределения
 # ---------------------------------------------------------------------------
-def chart_cdf(a, b, dists, number):
+def fig_cdf(a, b, dists):
+    """Рисунок пары: две функции распределения (без сохранения)."""
     fig, ax = plt.subplots(figsize=(16.5 / 2.54, 5.0 / 2.54), dpi=DPI)
     fig.subplots_adjust(left=0.09, right=0.985, top=0.92, bottom=0.17)
     for ticker, style in ((a, "-"), (b, "--")):
@@ -191,7 +199,14 @@ def chart_cdf(a, b, dists, number):
               prop={"family": FONT, "size": 8})
     _style_axes(ax, range(-10, 13, 2), "F(x)", yformatter=axis_unit)
     ax.yaxis.set_major_locator(MultipleLocator(0.2))
+    return fig
+
+
+def chart_cdf(a, b, dists, number):
+    """Рисунок пары F(x): сохраняет PNG и возвращает путь."""
+    fig = fig_cdf(a, b, dists)
     path = os.path.join(OUT_DIR, "dom_fig%d.png" % number)
+    os.makedirs(OUT_DIR, exist_ok=True)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     return path
@@ -200,7 +215,8 @@ def chart_cdf(a, b, dists, number):
 # ---------------------------------------------------------------------------
 # Рисунок пары: разность функций распределения
 # ---------------------------------------------------------------------------
-def chart_diff(a, b, result, number):
+def fig_diff(a, b, result):
+    """Рисунок пары: разность функций распределения (без сохранения)."""
     fig, ax = plt.subplots(figsize=(16.5 / 2.54, 4.6 / 2.54), dpi=DPI)
     fig.subplots_adjust(left=0.09, right=0.985, top=0.92, bottom=0.17)
     xs = [x * 100.0 for x in result["grid"]]
@@ -224,7 +240,14 @@ def chart_diff(a, b, result, number):
     lo, hi = ax.get_ylim()
     ax.set_ylim(lo - 0.04 * (hi - lo), hi + 0.14 * (hi - lo))
     _style_axes(ax, range(-10, 13, 2), "F₁(x) − F₂(x), п.п.")
+    return fig
+
+
+def chart_diff(a, b, result, number):
+    """Рисунок разности F1 - F2: сохраняет PNG и возвращает путь."""
+    fig = fig_diff(a, b, result)
     path = os.path.join(OUT_DIR, "dom_fig%d.png" % number)
+    os.makedirs(OUT_DIR, exist_ok=True)
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     return path
