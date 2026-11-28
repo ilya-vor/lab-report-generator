@@ -21,6 +21,15 @@ python build.py --lab 2 --no-fields  # без Word: поля/TOC останут�
 python build.py --compact out/отчет.docx
 ```
 
+Показать расчёт второй лабы без сборки отчёта:
+
+```powershell
+python show_lab2.py                  # таблицы 1-5 + окна с рисунками 1-7
+python show_lab2.py --no-figures     # только таблицы
+python show_lab2.py --no-tables      # только рисунки
+python show_lab2.py --data другой.csv
+```
+
 Результат - в `out/`: `*.docx`, `*.pdf` и PNG/SVG схем.
 
 ## Что внутри
@@ -40,6 +49,9 @@ python build.py --compact out/отчет.docx
 | `labs/risk_data.py` | котировки для `lab_risk`: `labs/data/risk_quotes.csv`, `python -m labs.risk_data --force`. |
 | `labs/risk_measures.py` | расчёт мер риска, вариационного ряда и нормальной модели (без matplotlib и docx). |
 | `labs/data/risk_quotes.csv` | выборка: дневные цены закрытия за два года, общие торговые дни трёх бирж. |
+| `labs/lab_dominance.py` | ПРУН2: отчёт по стохастическому доминированию (ключ `risk2`). |
+| `labs/dominance.py` | расчёт законов распределения и критериев СД 1-го/2-го порядков (без matplotlib и docx). |
+| `show_lab2.py` | показать таблицы 1-5 и рисунки 1-7 без сборки DOCX (аналог `kod/show_lab.py`). |
 | `figures/` | скриншоты, снятые вручную (Protégé, диаграммы средств); вставляются в отчёт как рисунки. |
 | `ontology/org.ttl` | ЛР4: онтология в OWL 2 DL (Turtle), открывается в Protégé. |
 | `report_template.docx` | эталон оформления: не перерисовывается, только `TPL`-маркеры. |
