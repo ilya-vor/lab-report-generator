@@ -19,6 +19,7 @@
     rep.p("Текст.")
     rep.save()
 """
+import copy
 import os
 import posixpath
 import re
@@ -190,6 +191,7 @@ class Report:
     def prepare(self):
         """Убирает наполнение шаблона и правит титул."""
         self._clear_content()
+        self._enable_h3_numbering()
         self._patch_title_page()
         self._compact_title()
         return self
@@ -305,15 +307,62 @@ class Report:
                 body.remove(ch)
 
     # ---------------- наполнение ----------------
-    def h1(self, text):
-        self.doc.add_heading(text, level=1)
+    def h1(self, text, page_break=True):
+        par = self.doc.add_heading(text, level=1)
+        if not page_break:
+            par.paragraph_format.page_break_before = False
+        return par
 
     def h2(self, text):
         self.doc.add_heading(text, level=2)
 
-    def p(self, text, first_line_indent=True):
+    def h3(self, text):
+        self.doc.add_heading(text, level=3)
+
+    def _enable_h3_numbering(self):
+        """Приводит «Heading 3» к виду второго уровня и нумерует его.
+
+        В шаблоне третий уровень заголовков не пронумерован и оформлен
+        иначе (синий, 12 пт, без полужирного). Копируем оформление второго
+        уровня и подключаем тот же список с ilvl = 2, чтобы подразделы
+        получали номера вида 2.2.1.
+        """
+        styles = self.doc.styles
+        try:
+            st2, st3 = styles["Heading 2"], styles["Heading 3"]
+        except KeyError:
+            return
+        pPr2 = st2.element.find(qn("w:pPr"))
+        numPr = pPr2.find(qn("w:numPr")) if pPr2 is not None else None
+        if numPr is None:
+            return
+        new = copy.deepcopy(numPr)
+        ilvl = new.find(qn("w:ilvl"))
+        if ilvl is not None:
+            ilvl.set(qn("w:val"), "2")
+
+        old_ppr = st3.element.find(qn("w:pPr"))
+        if old_ppr is not None:
+            st3.element.remove(old_ppr)
+        pPr3 = copy.deepcopy(pPr2)
+        keep = pPr3.find(qn("w:numPr"))
+        if keep is not None:
+            pPr3.remove(keep)
+        pPr3.append(new)
+        st3.element.append(pPr3)
+
+        old_rpr = st3.element.find(qn("w:rPr"))
+        if old_rpr is not None:
+            st3.element.remove(old_rpr)
+        rPr2 = st2.element.find(qn("w:rPr"))
+        if rPr2 is not None:
+            st3.element.append(copy.deepcopy(rPr2))
+
+    def p(self, text, first_line_indent=True, keep_with_next=False):
         par = self.doc.add_paragraph(style="Основной_ЛР")
         par.add_run(text)
+        if keep_with_next:
+            par.paragraph_format.keep_with_next = True
         return par
 
     def bullets(self, items):
@@ -443,6 +492,27 @@ class Report:
         run.font.size = Pt(size)
         run.italic = True
 
+    def formula_block(self, lines, size=10, indent_cm=1.2):
+        """Блок формул: строки без отступа первой строки, курсивом.
+
+        Нужен для многострочных кусочно-заданных записей и длинных сумм.
+        """
+        lines = list(lines)
+        for i, line in enumerate(lines):
+            par = self.doc.add_paragraph()
+            pf = par.paragraph_format
+            pf.first_line_indent = Cm(0)
+            pf.left_indent = Cm(indent_cm)
+            pf.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            pf.space_before = Pt(2 if i == 0 else 0)
+            pf.space_after = Pt(2 if i == len(lines) - 1 else 0)
+            pf.line_spacing = 1.0
+            pf.keep_with_next = i < len(lines) - 1
+            run = par.add_run(line)
+            run.font.name = TNR
+            run.font.size = Pt(size)
+            run.italic = True
+
     def code(self, text, size=9.5, indent_cm=0.6):
         """Листинг: монотипный шрифт, без отступа первой строки.
 
@@ -507,6 +577,11 @@ class Report:
                 # табуляция стоит слишком близко к краю номера.
                 s = s.replace('<w:tab w:val="num" w:pos="717"/>',
                               '<w:tab w:val="num" w:pos="920"/>', 1)
+                # Третий уровень заголовков в шаблоне идёт с точкой на
+                # конце («2.2.1.»); убираем её, чтобы нумерация была
+                # единообразной.
+                s = s.replace('<w:lvlText w:val="%1.%2.%3."/>',
+                              '<w:lvlText w:val="%1.%2.%3"/>', 1)
                 s = s.replace(
                     '<w:ind w:left="720" w:hanging="360"/></w:pPr>'
                     '<w:rPr><w:rFonts w:hint="default"/></w:rPr></w:lvl>',
