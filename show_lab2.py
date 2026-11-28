@@ -162,7 +162,9 @@ def main(argv=None):
 
     series_list = [t for t in risk_data.TICKERS if t in data]
     series = {t: risk_measures.variation_series(data[t]) for t in series_list}
-    dists, comparisons, pairs = dominance.build(series_list, series)
+    dists, comparisons, _ = dominance.build(series_list, series)
+    # порядок пар как в отчёте: нумерация рисунков 2-4 и 5-7 совпадает
+    pairs = [pair for pair in view.ORDER if pair in comparisons]
     profiles = {t: {
         "mean": risk_measures.grouped_moments(series[t])[0],
         "std": risk_measures.grouped_moments(series[t])[1] ** 0.5,
